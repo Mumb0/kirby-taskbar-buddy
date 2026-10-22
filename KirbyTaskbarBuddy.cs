@@ -376,18 +376,32 @@ public class KirbyTaskbarBuddy : ApplicationContext
         if (name == "normal") _currentForm = def;
     }
 
+    private Bitmap OpenSpriteBitmap(string fileName)
+    {
+        try
+        {
+            Stream resStream = Assembly.GetExecutingAssembly().GetManifestResourceStream(fileName);
+            if (resStream != null)
+            {
+                return new Bitmap(resStream);
+            }
+        }
+        catch { }
+
+        string exeDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+        string path = Path.Combine(exeDir, "sprites", fileName);
+        if (!File.Exists(path)) path = Path.Combine(exeDir, fileName);
+        if (File.Exists(path)) return new Bitmap(path);
+        return null;
+    }
+
     private void LoadAllSpritesheets()
     {
-        string exeDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-        string spritesDir = Path.Combine(exeDir, "sprites");
         foreach (FormDef form in _forms)
         {
-            string path = Path.Combine(spritesDir, form.FileName);
-            if (!File.Exists(path)) path = Path.Combine(exeDir, form.FileName);
-            if (!File.Exists(path)) continue;
-
-            using (Bitmap rawSheet = new Bitmap(path))
+            using (Bitmap rawSheet = OpenSpriteBitmap(form.FileName))
             {
+                if (rawSheet == null) continue;
                 Color bg0 = rawSheet.GetPixel(0, 0);
                 Color bgCorner = rawSheet.GetPixel(form.Coords[0].X, form.Coords[0].Y);
 
@@ -609,27 +623,26 @@ public class KirbyTaskbarBuddy : ApplicationContext
     {
         try
         {
-            string exeDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-            string sheetPath = Path.Combine(exeDir, "sprites", "kirby-normal.png");
-            if (!File.Exists(sheetPath)) sheetPath = Path.Combine(exeDir, "kirby-normal.png");
-            if (File.Exists(sheetPath))
+            using (Bitmap sheet = OpenSpriteBitmap("kirby-normal.png"))
             {
-                using (Bitmap sheet = new Bitmap(sheetPath))
-                using (Bitmap crop = new Bitmap(24, 24))
+                if (sheet != null)
                 {
-                    Color bg = sheet.GetPixel(0, 0);
-                    for (int y = 0; y < 24; y++)
+                    using (Bitmap crop = new Bitmap(24, 24))
                     {
-                        for (int x = 0; x < 24; x++)
+                        Color bg = sheet.GetPixel(0, 0);
+                        for (int y = 0; y < 24; y++)
                         {
-                            Color c = sheet.GetPixel(32 + x, 125 + y);
-                            if (c.R == bg.R && c.G == bg.G && c.B == bg.B)
-                                crop.SetPixel(x, y, Color.Transparent);
-                            else
-                                crop.SetPixel(x, y, c);
+                            for (int x = 0; x < 24; x++)
+                            {
+                                Color c = sheet.GetPixel(32 + x, 125 + y);
+                                if (c.R == bg.R && c.G == bg.G && c.B == bg.B)
+                                    crop.SetPixel(x, y, Color.Transparent);
+                                else
+                                    crop.SetPixel(x, y, c);
+                            }
                         }
+                        return Icon.FromHandle(crop.GetHicon());
                     }
-                    return Icon.FromHandle(crop.GetHicon());
                 }
             }
         }

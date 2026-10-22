@@ -136,7 +136,7 @@ public class KirbyTaskbarBuddy : ApplicationContext
 
     private const int TILE_SIZE = 64;
     private const int PIVOT_X = 32;
-    private const int PIVOT_Y = TILE_SIZE - 1;
+    private const int PIVOT_Y = TILE_SIZE - 5;
 
     private delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
     private static LowLevelKeyboardProc _proc;
@@ -168,8 +168,11 @@ public class KirbyTaskbarBuddy : ApplicationContext
         public string Key;
         public string FileName;
         public Rectangle[] Coords;
+        public Rectangle[] GuardCoords;
         public Bitmap[] RawFrames64;
         public Bitmap[] ScaledFrames;
+        public Bitmap[] RawGuardFrames64;
+        public Bitmap[] ScaledGuardFrames;
     }
 
     private readonly List<FormDef> _forms = new List<FormDef>();
@@ -182,6 +185,7 @@ public class KirbyTaskbarBuddy : ApplicationContext
     private int _lastRenderedX = int.MinValue;
     private int _lastRenderedY = int.MinValue;
     private FormDef _lastRenderedForm = null;
+    private bool _lastRenderedGuard = false;
     private int _topmostRefreshCounter = 0;
 
     [STAThread]
@@ -289,88 +293,136 @@ public class KirbyTaskbarBuddy : ApplicationContext
         AddForm("normal", "0", "kirby-normal.png", new[] {
             new Rectangle(32, 125, 24, 24), new Rectangle(60, 125, 24, 24),
             new Rectangle(87, 125, 24, 24), new Rectangle(114, 125, 24, 24)
+        }, new[] {
+            new Rectangle(79, 263, 26, 25), new Rectangle(108, 263, 26, 25)
         });
         AddForm("ice", "l", "kirby-ice.png", new[] {
             new Rectangle(6, 213, 24, 34), new Rectangle(35, 213, 24, 34),
             new Rectangle(63, 213, 24, 34), new Rectangle(92, 213, 24, 34)
+        }, new[] {
+            new Rectangle(42, 605, 34, 26), new Rectangle(42, 642, 34, 26),
+            new Rectangle(42, 679, 34, 26)
         });
         AddForm("bomb", "b", "kirby-bomb.png", new[] {
             new Rectangle(0, 101, 31, 29), new Rectangle(32, 101, 32, 29),
             new Rectangle(68, 101, 32, 29), new Rectangle(98, 101, 32, 29)
+        }, new[] {
+            new Rectangle(304, 103, 32, 28), new Rectangle(339, 103, 32, 28)
         });
         AddForm("beam", "e", "kirby-beam.png", new[] {
             new Rectangle(5, 101, 27, 37), new Rectangle(35, 101, 27, 37),
             new Rectangle(65, 101, 27, 37), new Rectangle(96, 101, 27, 37)
+        }, new[] {
+            new Rectangle(5, 348, 31, 27), new Rectangle(39, 348, 31, 27)
         });
         AddForm("cutter", "c", "kirby-cutter.png", new[] {
             new Rectangle(4, 126, 29, 35), new Rectangle(34, 126, 29, 35),
             new Rectangle(66, 126, 29, 35), new Rectangle(100, 126, 29, 35)
+        }, new[] {
+            new Rectangle(5, 413, 28, 30), new Rectangle(36, 413, 28, 30)
         });
         AddForm("fighter", "f", "kirby-fighter.png", new[] {
             new Rectangle(6, 95, 26, 24), new Rectangle(36, 95, 26, 24),
             new Rectangle(66, 95, 26, 24), new Rectangle(96, 95, 26, 24)
+        }, new[] {
+            new Rectangle(5, 333, 29, 25), new Rectangle(37, 333, 29, 25)
         });
         AddForm("fire", "d", "kirby-fire.png", new[] {
             new Rectangle(6, 309, 24, 34), new Rectangle(35, 309, 24, 34),
             new Rectangle(63, 309, 24, 34), new Rectangle(92, 309, 24, 34)
+        }, new[] {
+            new Rectangle(5, 941, 28, 31), new Rectangle(36, 941, 28, 31)
         });
         AddForm("hammer", "h", "kirby-hammer.png", new[] {
             new Rectangle(5, 164, 44, 49), new Rectangle(52, 164, 44, 49),
             new Rectangle(99, 164, 44, 49), new Rectangle(146, 164, 44, 49)
+        }, new[] {
+            new Rectangle(5, 426, 29, 34), new Rectangle(37, 426, 29, 34)
         });
         AddForm("jet", "j", "kirby-jet.png", new[] {
             new Rectangle(6, 114, 28, 29), new Rectangle(39, 114, 28, 29),
             new Rectangle(70, 114, 28, 29), new Rectangle(101, 114, 28, 29)
+        }, new[] {
+            new Rectangle(5, 283, 30, 28), new Rectangle(38, 283, 30, 28)
         });
         AddForm("mirror", "m", "kirby-mirror.png", new[] {
             new Rectangle(5, 117, 27, 37), new Rectangle(35, 117, 27, 37),
             new Rectangle(65, 117, 27, 37), new Rectangle(96, 117, 27, 37)
+        }, new[] {
+            new Rectangle(220, 877, 32, 34), new Rectangle(255, 877, 32, 34),
+            new Rectangle(290, 877, 32, 34), new Rectangle(325, 877, 32, 34),
+            new Rectangle(360, 877, 32, 34), new Rectangle(395, 877, 32, 34),
+            new Rectangle(430, 877, 32, 34), new Rectangle(465, 877, 32, 34),
+            new Rectangle(500, 877, 32, 34), new Rectangle(535, 877, 32, 34),
+            new Rectangle(570, 877, 32, 34), new Rectangle(605, 877, 32, 34),
+            new Rectangle(640, 877, 32, 34), new Rectangle(675, 877, 32, 34),
+            new Rectangle(710, 877, 32, 34)
         });
         AddForm("ninja", "n", "kirby-ninja.png", new[] {
             new Rectangle(207, 45, 27, 32), new Rectangle(235, 45, 27, 32),
             new Rectangle(264, 45, 27, 32), new Rectangle(296, 45, 27, 32)
+        }, new[] {
+            new Rectangle(5, 234, 28, 26), new Rectangle(36, 234, 28, 26)
         });
         AddForm("paint", "p", "kirby-paint.png", new[] {
             new Rectangle(5, 113, 26, 28), new Rectangle(34, 113, 26, 28),
             new Rectangle(62, 113, 26, 28), new Rectangle(92, 113, 26, 28)
+        }, new[] {
+            new Rectangle(181, 196, 26, 25), new Rectangle(210, 196, 26, 25)
         });
         AddForm("parasol", "r", "kirby-parasol.png", new[] {
             new Rectangle(269, 92, 42, 49), new Rectangle(314, 92, 42, 49),
             new Rectangle(359, 92, 42, 49), new Rectangle(404, 92, 42, 49)
+        }, new[] {
+            new Rectangle(669, 116, 29, 25), new Rectangle(701, 116, 29, 25)
         });
         AddForm("plasma", "a", "kirby-plasma.png", new[] {
             new Rectangle(6, 357, 24, 34), new Rectangle(35, 357, 24, 34),
             new Rectangle(63, 357, 24, 34), new Rectangle(92, 357, 24, 34)
+        }, new[] {
+            new Rectangle(5, 1078, 28, 29), new Rectangle(36, 1078, 28, 29)
         });
         AddForm("stone", "s", "kirby-stone.png", new[] {
             new Rectangle(5, 123, 27, 32), new Rectangle(33, 123, 27, 32),
             new Rectangle(62, 123, 27, 32), new Rectangle(94, 123, 27, 32)
+        }, new[] {
+            new Rectangle(5, 406, 28, 25), new Rectangle(36, 406, 28, 25)
         });
         AddForm("suplex", "u", "kirby-suplex.png", new[] {
             new Rectangle(6, 95, 26, 24), new Rectangle(36, 95, 26, 24),
             new Rectangle(66, 95, 26, 24), new Rectangle(96, 95, 26, 24)
+        }, new[] {
+            new Rectangle(5, 333, 29, 25), new Rectangle(37, 333, 29, 25)
         });
         AddForm("sword", "w", "kirby-sword.png", new[] {
             new Rectangle(3, 101, 32, 30), new Rectangle(34, 101, 32, 30),
             new Rectangle(67, 101, 32, 30), new Rectangle(101, 101, 32, 30)
+        }, new[] {
+            new Rectangle(5, 321, 32, 28), new Rectangle(40, 321, 32, 28)
         });
         AddForm("wheel", "v", "kirby-wheel.png", new[] {
             new Rectangle(5, 121, 26, 28), new Rectangle(34, 121, 26, 28),
             new Rectangle(62, 121, 26, 28), new Rectangle(92, 121, 26, 28)
+        }, new[] {
+            new Rectangle(152, 204, 26, 25), new Rectangle(181, 204, 26, 25)
         });
         AddForm("wing", "g", "kirby-wing.png", new[] {
             new Rectangle(4, 127, 31, 32), new Rectangle(35, 127, 31, 32),
             new Rectangle(66, 127, 31, 32), new Rectangle(100, 127, 31, 32)
+        }, new[] {
+            new Rectangle(5, 448, 30, 29), new Rectangle(38, 448, 30, 29)
         });
         AddForm("yoyo", "y", "kirby-yoyo.png", new[] {
             new Rectangle(5, 121, 26, 28), new Rectangle(34, 121, 26, 28),
             new Rectangle(62, 121, 26, 28), new Rectangle(92, 121, 26, 28)
+        }, new[] {
+            new Rectangle(152, 204, 26, 25), new Rectangle(181, 204, 26, 25)
         });
     }
 
-    private void AddForm(string name, string key, string file, Rectangle[] coords)
+    private void AddForm(string name, string key, string file, Rectangle[] coords, Rectangle[] guardCoords)
     {
-        FormDef def = new FormDef { Name = name, Key = key, FileName = file, Coords = coords };
+        FormDef def = new FormDef { Name = name, Key = key, FileName = file, Coords = coords, GuardCoords = guardCoords };
         _forms.Add(def);
         _keyToForm[key] = def;
         if (name == "normal") _currentForm = def;
@@ -395,6 +447,132 @@ public class KirbyTaskbarBuddy : ApplicationContext
         return null;
     }
 
+    private static Bitmap ExtractAlignedTile(Bitmap rawSheet, Rectangle r, Color bg0, Color bgCorner, bool isGuard = false)
+    {
+        int maxY = r.Height - 1;
+        for (int dy = 0; dy < r.Height; dy++)
+        {
+            for (int dx = 0; dx < r.Width; dx++)
+            {
+                Color c = rawSheet.GetPixel(r.X + dx, r.Y + dy);
+                if (!IsBgColor(c, bg0, bgCorner)) maxY = dy;
+            }
+        }
+
+        int feetMinX = r.Width, feetMaxX = 0;
+        int startY = Math.Max(0, maxY - 3);
+        for (int dy = startY; dy <= maxY; dy++)
+        {
+            for (int dx = 0; dx < r.Width; dx++)
+            {
+                Color c = rawSheet.GetPixel(r.X + dx, r.Y + dy);
+                if (!IsBgColor(c, bg0, bgCorner))
+                {
+                    if ((!isGuard || dy >= maxY - 1) && dx < feetMinX) feetMinX = dx;
+                    if (dx > feetMaxX) feetMaxX = dx;
+                }
+            }
+        }
+
+        int bodyPivotX = (feetMinX + feetMaxX) / 2;
+        int destX = PIVOT_X - bodyPivotX;
+        int destY = PIVOT_Y - maxY;
+
+        Bitmap tile64 = new Bitmap(TILE_SIZE, TILE_SIZE, PixelFormat.Format32bppPArgb);
+        for (int dy = 0; dy < r.Height; dy++)
+        {
+            for (int dx = 0; dx < r.Width; dx++)
+            {
+                Color c = rawSheet.GetPixel(r.X + dx, r.Y + dy);
+                if (!IsBgColor(c, bg0, bgCorner))
+                {
+                    int tx = destX + dx;
+                    int ty = destY + dy;
+                    if (tx >= 0 && tx < TILE_SIZE && ty >= 0 && ty < TILE_SIZE)
+                    {
+                        tile64.SetPixel(tx, ty, Color.FromArgb(255, c.R, c.G, c.B));
+                    }
+                }
+            }
+        }
+        return tile64;
+    }
+
+    private static Bitmap ExtractMirrorGuardTile(Bitmap rawSheet, Rectangle rainRect, Color bg0)
+    {
+        Rectangle kirbyRect = new Rectangle(37, 880, 31, 27);
+        Rectangle bubbleRect = new Rectangle(2, 877, 32, 34);
+        Color kirbyCorner = rawSheet.GetPixel(kirbyRect.X, kirbyRect.Y);
+        Color rainCorner = rawSheet.GetPixel(rainRect.X, rainRect.Y);
+        Color bubbleCorner = rawSheet.GetPixel(bubbleRect.X, bubbleRect.Y);
+
+        // Place Guard Mirror Kirby at his exact floor-aligned position (bodyPivotX=17, maxY=25)
+        // and center the 30x32 bubble symmetrically around him (extending 3px below his feet)
+        int kirbyDestX = PIVOT_X - 17;
+        int kirbyDestY = PIVOT_Y - 25;
+        int sphereDestX = kirbyDestX;
+        int sphereDestY = kirbyDestY - 4;
+
+        Bitmap tile64 = new Bitmap(TILE_SIZE, TILE_SIZE, PixelFormat.Format32bppPArgb);
+
+        for (int dy = 0; dy < rainRect.Height; dy++)
+        {
+            for (int dx = 0; dx < rainRect.Width; dx++)
+            {
+                Color rc = rawSheet.GetPixel(rainRect.X + dx, rainRect.Y + dy);
+                if (IsBgColor(rc, bg0, rainCorner)) continue;
+
+                int tx = sphereDestX + dx;
+                int ty = sphereDestY + dy;
+                if (tx < 0 || tx >= TILE_SIZE || ty < 0 || ty >= TILE_SIZE) continue;
+
+                int kdx = tx - kirbyDestX;
+                int kdy = ty - kirbyDestY;
+                bool hasKirby = false;
+                Color kc = Color.Empty;
+                if (kdx >= 0 && kdx < kirbyRect.Width && kdy >= 0 && kdy < kirbyRect.Height)
+                {
+                    kc = rawSheet.GetPixel(kirbyRect.X + kdx, kirbyRect.Y + kdy);
+                    if (!IsBgColor(kc, bg0, kirbyCorner)) hasKirby = true;
+                }
+
+                Color bc = rawSheet.GetPixel(bubbleRect.X + dx, bubbleRect.Y + dy);
+                bool hasBubbleRim = !IsBgColor(bc, bg0, bubbleCorner);
+                if (hasBubbleRim)
+                {
+                    // Clean up orange/magenta pixels on the bubble rim into crisp sky-blue
+                    if (bc.R > 180 && bc.G < 200)
+                    {
+                        bc = Color.FromArgb(255, 80, 180, 248);
+                    }
+                    tile64.SetPixel(tx, ty, Color.FromArgb(245, bc.R, bc.G, bc.B));
+                }
+                else
+                {
+                    // Smooth out the 3 pure-white stripe bands between Orange and Yellow into warm golden-amber
+                    if (rc.R >= 248 && rc.G >= 248 && rc.B >= 248)
+                    {
+                        rc = Color.FromArgb(255, 248, 200, 64);
+                    }
+
+                    if (hasKirby)
+                    {
+                        int nr = (int)(kc.R * 0.55 + rc.R * 0.45);
+                        int ng = (int)(kc.G * 0.55 + rc.G * 0.45);
+                        int nb = (int)(kc.B * 0.55 + rc.B * 0.45);
+                        tile64.SetPixel(tx, ty, Color.FromArgb(255, nr, ng, nb));
+                    }
+                    else
+                    {
+                        tile64.SetPixel(tx, ty, Color.FromArgb(175, rc.R, rc.G, rc.B));
+                    }
+                }
+            }
+        }
+
+        return tile64;
+    }
+
     private void LoadAllSpritesheets()
     {
         foreach (FormDef form in _forms)
@@ -408,61 +586,52 @@ public class KirbyTaskbarBuddy : ApplicationContext
                 Bitmap[] base4 = new Bitmap[form.Coords.Length];
                 for (int i = 0; i < form.Coords.Length; i++)
                 {
-                    Rectangle r = form.Coords[i];
-                    int maxY = r.Height - 1;
-                    for (int dy = 0; dy < r.Height; dy++)
-                    {
-                        for (int dx = 0; dx < r.Width; dx++)
-                        {
-                            Color c = rawSheet.GetPixel(r.X + dx, r.Y + dy);
-                            if (!IsBgColor(c, bg0, bgCorner)) maxY = dy;
-                        }
-                    }
-
-                    int feetMinX = r.Width, feetMaxX = 0;
-                    int startY = Math.Max(0, maxY - 3);
-                    for (int dy = startY; dy <= maxY; dy++)
-                    {
-                        for (int dx = 0; dx < r.Width; dx++)
-                        {
-                            Color c = rawSheet.GetPixel(r.X + dx, r.Y + dy);
-                            if (!IsBgColor(c, bg0, bgCorner))
-                            {
-                                if (dx < feetMinX) feetMinX = dx;
-                                if (dx > feetMaxX) feetMaxX = dx;
-                            }
-                        }
-                    }
-
-                    int bodyPivotX = (feetMinX + feetMaxX) / 2;
-                    int destX = PIVOT_X - bodyPivotX;
-                    int destY = PIVOT_Y - maxY;
-
-                    Bitmap tile64 = new Bitmap(TILE_SIZE, TILE_SIZE, PixelFormat.Format32bppPArgb);
-                    for (int dy = 0; dy < r.Height; dy++)
-                    {
-                        for (int dx = 0; dx < r.Width; dx++)
-                        {
-                            Color c = rawSheet.GetPixel(r.X + dx, r.Y + dy);
-                            if (!IsBgColor(c, bg0, bgCorner))
-                            {
-                                int tx = destX + dx;
-                                int ty = destY + dy;
-                                if (tx >= 0 && tx < TILE_SIZE && ty >= 0 && ty < TILE_SIZE)
-                                {
-                                    tile64.SetPixel(tx, ty, Color.FromArgb(255, c.R, c.G, c.B));
-                                }
-                            }
-                        }
-                    }
-                    base4[i] = tile64;
+                    base4[i] = ExtractAlignedTile(rawSheet, form.Coords[i], bg0, bgCorner);
                 }
 
                 // 6-frame ping-pong walk cycle [0, 1, 2, 3, 2, 1]
                 form.RawFrames64 = new Bitmap[] { base4[0], base4[1], base4[2], base4[3], base4[2], base4[1] };
+
+                if (form.GuardCoords != null && form.GuardCoords.Length > 0)
+                {
+                    form.RawGuardFrames64 = new Bitmap[form.GuardCoords.Length];
+                    for (int i = 0; i < form.GuardCoords.Length; i++)
+                    {
+                        Rectangle gr = form.GuardCoords[i];
+                        if (form.Name == "mirror")
+                        {
+                            form.RawGuardFrames64[i] = ExtractMirrorGuardTile(rawSheet, gr, bg0);
+                        }
+                        else
+                        {
+                            Color gCorner = rawSheet.GetPixel(gr.X, gr.Y);
+                            form.RawGuardFrames64[i] = ExtractAlignedTile(rawSheet, gr, bg0, gCorner, true);
+                        }
+                    }
+                }
             }
         }
         RebuildScaledFrames();
+    }
+
+    private static Bitmap[] ScaleTileArray(Bitmap[] rawTiles, int targetSize)
+    {
+        if (rawTiles == null) return null;
+        Bitmap[] scaledArr = new Bitmap[rawTiles.Length];
+        for (int i = 0; i < rawTiles.Length; i++)
+        {
+            Bitmap scaled = new Bitmap(targetSize, targetSize, PixelFormat.Format32bppPArgb);
+            using (Graphics g = Graphics.FromImage(scaled))
+            {
+                g.Clear(Color.Transparent);
+                g.InterpolationMode = InterpolationMode.NearestNeighbor;
+                g.PixelOffsetMode = PixelOffsetMode.Half;
+                g.SmoothingMode = SmoothingMode.None;
+                g.DrawImage(rawTiles[i], new Rectangle(0, 0, targetSize, targetSize));
+            }
+            scaledArr[i] = scaled;
+        }
+        return scaledArr;
     }
 
     private void RebuildScaledFrames()
@@ -475,20 +644,12 @@ public class KirbyTaskbarBuddy : ApplicationContext
             {
                 foreach (Bitmap old in form.ScaledFrames) if (old != null) old.Dispose();
             }
-            form.ScaledFrames = new Bitmap[form.RawFrames64.Length];
-            for (int i = 0; i < form.RawFrames64.Length; i++)
+            if (form.ScaledGuardFrames != null)
             {
-                Bitmap scaled = new Bitmap(targetSize, targetSize, PixelFormat.Format32bppPArgb);
-                using (Graphics g = Graphics.FromImage(scaled))
-                {
-                    g.Clear(Color.Transparent);
-                    g.InterpolationMode = InterpolationMode.NearestNeighbor;
-                    g.PixelOffsetMode = PixelOffsetMode.Half;
-                    g.SmoothingMode = SmoothingMode.None;
-                    g.DrawImage(form.RawFrames64[i], new Rectangle(0, 0, targetSize, targetSize));
-                }
-                form.ScaledFrames[i] = scaled;
+                foreach (Bitmap old in form.ScaledGuardFrames) if (old != null) old.Dispose();
             }
+            form.ScaledFrames = ScaleTileArray(form.RawFrames64, targetSize);
+            form.ScaledGuardFrames = ScaleTileArray(form.RawGuardFrames64, targetSize);
         }
         _lastRenderedForm = null;
     }
@@ -535,13 +696,28 @@ public class KirbyTaskbarBuddy : ApplicationContext
 
         if (!_overlay.Visible) _overlay.Show();
 
-        double delta60 = dtSeconds * 60.0;
-        _kirbyX += 1.5 * delta60;
-        _animTime += 0.1 * delta60;
-
         Rectangle workArea = Screen.PrimaryScreen.WorkingArea;
         int spriteSize = TILE_SIZE * _scale;
         int halfWidth = (TILE_SIZE / 2) * _scale;
+
+        // Check if mouse pointer is close to Kirby's body on the taskbar
+        Point mouse = Cursor.Position;
+        double kirbyCenterY = workArea.Bottom - (16 * _scale);
+        double distX = Math.Abs(mouse.X - _kirbyX);
+        double distY = Math.Abs(mouse.Y - kirbyCenterY);
+        bool isMouseNear = (distX <= 24 * _scale) && (distY <= 28 * _scale);
+
+        double delta60 = dtSeconds * 60.0;
+        if (!isMouseNear)
+        {
+            _kirbyX += 1.5 * delta60;
+            _animTime += 0.1 * delta60;
+        }
+        else
+        {
+            // Match SNES Kirby Super Star guard flash / shield shimmer speed (4 frames per state @ 60Hz = 15 FPS)
+            _animTime += 0.25 * delta60;
+        }
 
         if (_kirbyX > workArea.Right + halfWidth)
         {
@@ -550,12 +726,15 @@ public class KirbyTaskbarBuddy : ApplicationContext
 
         if (_currentForm == null || _currentForm.ScaledFrames == null) return;
 
-        int frameCount = _currentForm.ScaledFrames.Length;
+        bool useGuard = isMouseNear && _currentForm.ScaledGuardFrames != null && _currentForm.ScaledGuardFrames.Length > 0;
+        Bitmap[] activeFrames = useGuard ? _currentForm.ScaledGuardFrames : _currentForm.ScaledFrames;
+
+        int frameCount = activeFrames.Length;
         int frameIdx = ((int)Math.Floor(_animTime)) % frameCount;
         if (frameIdx < 0) frameIdx += frameCount;
 
         int screenX = (int)Math.Round(_kirbyX) - halfWidth;
-        int screenY = workArea.Bottom - spriteSize;
+        int screenY = workArea.Bottom - (PIVOT_Y + 1) * _scale;
 
         _topmostRefreshCounter++;
         if (_topmostRefreshCounter >= 60)
@@ -564,13 +743,14 @@ public class KirbyTaskbarBuddy : ApplicationContext
             SetWindowPos(_overlay.Handle, new IntPtr(-1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010);
         }
 
-        if (screenX != _lastRenderedX || screenY != _lastRenderedY || frameIdx != _lastRenderedFrameIdx || _currentForm != _lastRenderedForm)
+        if (screenX != _lastRenderedX || screenY != _lastRenderedY || frameIdx != _lastRenderedFrameIdx || _currentForm != _lastRenderedForm || useGuard != _lastRenderedGuard)
         {
-            _overlay.UpdateSpriteFrame(_currentForm.ScaledFrames[frameIdx], screenX, screenY);
+            _overlay.UpdateSpriteFrame(activeFrames[frameIdx], screenX, screenY);
             _lastRenderedX = screenX;
             _lastRenderedY = screenY;
             _lastRenderedFrameIdx = frameIdx;
             _lastRenderedForm = _currentForm;
+            _lastRenderedGuard = useGuard;
         }
         
     }

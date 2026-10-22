@@ -103,7 +103,7 @@ public class KirbyKeyBridge : ApplicationContext
         try
         {
             string exeDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-            string sheetPath = Path.Combine(exeDir, "SNES - Kirby Super Star - Playable Characters - Kirby.png");
+            string sheetPath = Path.Combine(exeDir, "kirby-normal.png");
             if (File.Exists(sheetPath))
             {
                 using (Bitmap sheet = new Bitmap(sheetPath))

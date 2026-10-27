@@ -134,9 +134,9 @@ public class KirbyTaskbarBuddy : ApplicationContext
     private const string RUN_REG_KEY = @"Software\Microsoft\Windows\CurrentVersion\Run";
     private const string APP_NAME = "KirbyWallpaperKeyBridge";
 
-    private const int TILE_SIZE = 64;
-    private const int PIVOT_X = 32;
-    private const int PIVOT_Y = TILE_SIZE - 5;
+    private const int TILE_SIZE = 80;
+    private const int PIVOT_X = 40;
+    private const int PIVOT_Y = 54;
 
     private delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
     private static LowLevelKeyboardProc _proc;
@@ -169,23 +169,33 @@ public class KirbyTaskbarBuddy : ApplicationContext
         public string FileName;
         public Rectangle[] Coords;
         public Rectangle[] GuardCoords;
+        public Rectangle[] JumpCoords;
         public Bitmap[] RawFrames64;
         public Bitmap[] ScaledFrames;
         public Bitmap[] RawGuardFrames64;
         public Bitmap[] ScaledGuardFrames;
+        public Bitmap[] RawJumpFrames64;
+        public Bitmap[] ScaledJumpFrames;
     }
 
     private readonly List<FormDef> _forms = new List<FormDef>();
     private readonly Dictionary<string, FormDef> _keyToForm = new Dictionary<string, FormDef>();
     private FormDef _currentForm;
 
+    private const double JUMP_INIT_VEL = 4.2;
+    private const double JUMP_GRAVITY = 0.18;
+
     private double _kirbyX = -64;
     private double _animTime = 0.0;
+    private bool _isJumping = false;
+    private double _jumpY = 0.0;
+    private double _jumpVelY = 0.0;
     private int _lastRenderedFrameIdx = -1;
     private int _lastRenderedX = int.MinValue;
     private int _lastRenderedY = int.MinValue;
     private FormDef _lastRenderedForm = null;
     private bool _lastRenderedGuard = false;
+    private bool _lastRenderedJump = false;
     private int _topmostRefreshCounter = 0;
 
     [STAThread]
@@ -295,6 +305,10 @@ public class KirbyTaskbarBuddy : ApplicationContext
             new Rectangle(87, 125, 24, 24), new Rectangle(114, 125, 24, 24)
         }, new[] {
             new Rectangle(79, 263, 26, 25), new Rectangle(108, 263, 26, 25)
+        }, new[] {
+            new Rectangle(66, 193, 23, 24), new Rectangle(94, 193, 23, 23),
+            new Rectangle(122, 194, 21, 22), new Rectangle(147, 193, 24, 23),
+            new Rectangle(176, 193, 23, 24)
         });
         AddForm("ice", "l", "kirby-ice.png", new[] {
             new Rectangle(6, 213, 24, 34), new Rectangle(35, 213, 24, 34),
@@ -302,48 +316,80 @@ public class KirbyTaskbarBuddy : ApplicationContext
         }, new[] {
             new Rectangle(42, 605, 34, 26), new Rectangle(42, 642, 34, 26),
             new Rectangle(42, 679, 34, 26)
+        }, new[] {
+            new Rectangle(6, 372, 24, 33), new Rectangle(35, 381, 26, 24),
+            new Rectangle(66, 381, 26, 27), new Rectangle(97, 372, 25, 32),
+            new Rectangle(127, 365, 23, 40)
         });
         AddForm("bomb", "b", "kirby-bomb.png", new[] {
             new Rectangle(0, 101, 31, 29), new Rectangle(32, 101, 32, 29),
             new Rectangle(68, 101, 32, 29), new Rectangle(98, 101, 32, 29)
         }, new[] {
             new Rectangle(304, 103, 32, 28), new Rectangle(339, 103, 32, 28)
+        }, new[] {
+            new Rectangle(6, 174, 27, 30), new Rectangle(38, 180, 23, 23),
+            new Rectangle(66, 180, 21, 27), new Rectangle(92, 178, 28, 25),
+            new Rectangle(125, 168, 23, 36)
         });
         AddForm("beam", "e", "kirby-beam.png", new[] {
             new Rectangle(5, 101, 27, 37), new Rectangle(35, 101, 27, 37),
             new Rectangle(65, 101, 27, 37), new Rectangle(96, 101, 27, 37)
         }, new[] {
             new Rectangle(5, 348, 31, 27), new Rectangle(39, 348, 31, 27)
+        }, new[] {
+            new Rectangle(6, 193, 26, 30), new Rectangle(37, 199, 27, 24),
+            new Rectangle(69, 199, 23, 29), new Rectangle(97, 191, 28, 31),
+            new Rectangle(130, 184, 24, 39)
         });
         AddForm("cutter", "c", "kirby-cutter.png", new[] {
             new Rectangle(4, 126, 29, 35), new Rectangle(34, 126, 29, 35),
             new Rectangle(66, 126, 29, 35), new Rectangle(100, 126, 29, 35)
         }, new[] {
             new Rectangle(5, 413, 28, 30), new Rectangle(36, 413, 28, 30)
+        }, new[] {
+            new Rectangle(6, 214, 23, 37), new Rectangle(34, 227, 23, 28),
+            new Rectangle(62, 227, 23, 33), new Rectangle(90, 221, 27, 29),
+            new Rectangle(122, 216, 24, 35)
         });
         AddForm("fighter", "f", "kirby-fighter.png", new[] {
             new Rectangle(6, 95, 26, 24), new Rectangle(36, 95, 26, 24),
             new Rectangle(66, 95, 26, 24), new Rectangle(96, 95, 26, 24)
         }, new[] {
             new Rectangle(5, 333, 29, 25), new Rectangle(37, 333, 29, 25)
+        }, new[] {
+            new Rectangle(6, 176, 25, 24), new Rectangle(36, 171, 23, 28),
+            new Rectangle(64, 175, 21, 23), new Rectangle(90, 176, 26, 23),
+            new Rectangle(121, 169, 23, 31)
         });
         AddForm("fire", "d", "kirby-fire.png", new[] {
             new Rectangle(6, 309, 24, 34), new Rectangle(35, 309, 24, 34),
             new Rectangle(63, 309, 24, 34), new Rectangle(92, 309, 24, 34)
         }, new[] {
             new Rectangle(5, 941, 28, 31), new Rectangle(36, 941, 28, 31)
+        }, new[] {
+            new Rectangle(6, 529, 24, 33), new Rectangle(35, 538, 26, 24),
+            new Rectangle(66, 538, 26, 27), new Rectangle(97, 529, 25, 32),
+            new Rectangle(127, 522, 23, 40)
         });
         AddForm("hammer", "h", "kirby-hammer.png", new[] {
             new Rectangle(5, 164, 44, 49), new Rectangle(52, 164, 44, 49),
             new Rectangle(99, 164, 44, 49), new Rectangle(146, 164, 44, 49)
         }, new[] {
             new Rectangle(5, 426, 29, 34), new Rectangle(37, 426, 29, 34)
+        }, new[] {
+            new Rectangle(8, 240, 42, 43), new Rectangle(82, 258, 31, 42),
+            new Rectangle(132, 259, 27, 45), new Rectangle(174, 239, 44, 42),
+            new Rectangle(236, 234, 37, 47)
         });
         AddForm("jet", "j", "kirby-jet.png", new[] {
             new Rectangle(6, 114, 28, 29), new Rectangle(39, 114, 28, 29),
             new Rectangle(70, 114, 28, 29), new Rectangle(101, 114, 28, 29)
         }, new[] {
             new Rectangle(5, 283, 30, 28), new Rectangle(38, 283, 30, 28)
+        }, new[] {
+            new Rectangle(6, 195, 26, 29), new Rectangle(37, 200, 24, 23),
+            new Rectangle(66, 200, 26, 24), new Rectangle(97, 197, 27, 26),
+            new Rectangle(129, 193, 25, 31)
         });
         AddForm("mirror", "m", "kirby-mirror.png", new[] {
             new Rectangle(5, 117, 27, 37), new Rectangle(35, 117, 27, 37),
@@ -357,72 +403,116 @@ public class KirbyTaskbarBuddy : ApplicationContext
             new Rectangle(570, 877, 32, 34), new Rectangle(605, 877, 32, 34),
             new Rectangle(640, 877, 32, 34), new Rectangle(675, 877, 32, 34),
             new Rectangle(710, 877, 32, 34)
+        }, new[] {
+            new Rectangle(6, 272, 26, 30), new Rectangle(37, 278, 27, 24),
+            new Rectangle(69, 278, 23, 29), new Rectangle(97, 270, 28, 31),
+            new Rectangle(130, 263, 24, 39)
         });
         AddForm("ninja", "n", "kirby-ninja.png", new[] {
             new Rectangle(207, 45, 27, 32), new Rectangle(235, 45, 27, 32),
             new Rectangle(264, 45, 27, 32), new Rectangle(296, 45, 27, 32)
         }, new[] {
             new Rectangle(5, 234, 28, 26), new Rectangle(36, 234, 28, 26)
+        }, new[] {
+            new Rectangle(6, 136, 23, 33), new Rectangle(34, 145, 23, 24),
+            new Rectangle(62, 145, 21, 31), new Rectangle(90, 141, 24, 27),
+            new Rectangle(119, 130, 23, 39)
         });
         AddForm("paint", "p", "kirby-paint.png", new[] {
             new Rectangle(5, 113, 26, 28), new Rectangle(34, 113, 26, 28),
             new Rectangle(62, 113, 26, 28), new Rectangle(92, 113, 26, 28)
         }, new[] {
             new Rectangle(181, 196, 26, 25), new Rectangle(210, 196, 26, 25)
+        }, new[] {
+            new Rectangle(6, 195, 24, 28), new Rectangle(35, 198, 23, 24),
+            new Rectangle(63, 199, 22, 25), new Rectangle(90, 196, 24, 26),
+            new Rectangle(119, 195, 23, 28)
         });
         AddForm("parasol", "r", "kirby-parasol.png", new[] {
             new Rectangle(269, 92, 42, 49), new Rectangle(314, 92, 42, 49),
             new Rectangle(359, 92, 42, 49), new Rectangle(404, 92, 42, 49)
         }, new[] {
             new Rectangle(669, 116, 29, 25), new Rectangle(701, 116, 29, 25)
+        }, new[] {
+            new Rectangle(11, 167, 37, 44), new Rectangle(77, 186, 30, 41),
+            new Rectangle(130, 187, 21, 45), new Rectangle(165, 168, 42, 41),
+            new Rectangle(229, 162, 30, 47)
         });
         AddForm("plasma", "a", "kirby-plasma.png", new[] {
             new Rectangle(6, 357, 24, 34), new Rectangle(35, 357, 24, 34),
             new Rectangle(63, 357, 24, 34), new Rectangle(92, 357, 24, 34)
         }, new[] {
             new Rectangle(5, 1078, 28, 29), new Rectangle(36, 1078, 28, 29)
+        }, new[] {
+            new Rectangle(6, 608, 24, 33), new Rectangle(35, 617, 26, 24),
+            new Rectangle(66, 617, 26, 27), new Rectangle(97, 608, 25, 32),
+            new Rectangle(127, 601, 23, 40)
         });
         AddForm("stone", "s", "kirby-stone.png", new[] {
             new Rectangle(5, 123, 27, 32), new Rectangle(33, 123, 27, 32),
             new Rectangle(62, 123, 27, 32), new Rectangle(94, 123, 27, 32)
         }, new[] {
             new Rectangle(5, 406, 28, 25), new Rectangle(36, 406, 28, 25)
+        }, new[] {
+            new Rectangle(6, 214, 23, 33), new Rectangle(34, 223, 23, 24),
+            new Rectangle(62, 223, 21, 31), new Rectangle(90, 219, 24, 27),
+            new Rectangle(119, 208, 23, 39)
         });
         AddForm("suplex", "u", "kirby-suplex.png", new[] {
             new Rectangle(6, 95, 26, 24), new Rectangle(36, 95, 26, 24),
             new Rectangle(66, 95, 26, 24), new Rectangle(96, 95, 26, 24)
         }, new[] {
             new Rectangle(5, 333, 29, 25), new Rectangle(37, 333, 29, 25)
+        }, new[] {
+            new Rectangle(6, 176, 25, 24), new Rectangle(36, 171, 23, 28),
+            new Rectangle(64, 175, 21, 23), new Rectangle(90, 176, 26, 23),
+            new Rectangle(121, 169, 23, 31)
         });
         AddForm("sword", "w", "kirby-sword.png", new[] {
             new Rectangle(3, 101, 32, 30), new Rectangle(34, 101, 32, 30),
             new Rectangle(67, 101, 32, 30), new Rectangle(101, 101, 32, 30)
         }, new[] {
             new Rectangle(5, 321, 32, 28), new Rectangle(40, 321, 32, 28)
+        }, new[] {
+            new Rectangle(6, 174, 27, 30), new Rectangle(38, 180, 23, 23),
+            new Rectangle(66, 180, 21, 27), new Rectangle(92, 178, 28, 25),
+            new Rectangle(125, 168, 23, 36)
         });
         AddForm("wheel", "v", "kirby-wheel.png", new[] {
             new Rectangle(5, 121, 26, 28), new Rectangle(34, 121, 26, 28),
             new Rectangle(62, 121, 26, 28), new Rectangle(92, 121, 26, 28)
         }, new[] {
             new Rectangle(152, 204, 26, 25), new Rectangle(181, 204, 26, 25)
+        }, new[] {
+            new Rectangle(6, 203, 24, 28), new Rectangle(35, 206, 23, 24),
+            new Rectangle(63, 207, 22, 25), new Rectangle(90, 204, 24, 26),
+            new Rectangle(119, 203, 23, 28)
         });
         AddForm("wing", "g", "kirby-wing.png", new[] {
             new Rectangle(4, 127, 31, 32), new Rectangle(35, 127, 31, 32),
             new Rectangle(66, 127, 31, 32), new Rectangle(100, 127, 31, 32)
         }, new[] {
             new Rectangle(5, 448, 30, 29), new Rectangle(38, 448, 30, 29)
+        }, new[] {
+            new Rectangle(6, 214, 26, 31), new Rectangle(37, 220, 24, 23),
+            new Rectangle(66, 222, 25, 30), new Rectangle(96, 217, 28, 27),
+            new Rectangle(129, 212, 23, 32)
         });
         AddForm("yoyo", "y", "kirby-yoyo.png", new[] {
             new Rectangle(5, 121, 26, 28), new Rectangle(34, 121, 26, 28),
             new Rectangle(62, 121, 26, 28), new Rectangle(92, 121, 26, 28)
         }, new[] {
             new Rectangle(152, 204, 26, 25), new Rectangle(181, 204, 26, 25)
+        }, new[] {
+            new Rectangle(6, 203, 24, 28), new Rectangle(35, 206, 23, 24),
+            new Rectangle(63, 207, 22, 25), new Rectangle(90, 204, 24, 26),
+            new Rectangle(119, 203, 23, 28)
         });
     }
 
-    private void AddForm(string name, string key, string file, Rectangle[] coords, Rectangle[] guardCoords)
+    private void AddForm(string name, string key, string file, Rectangle[] coords, Rectangle[] guardCoords, Rectangle[] jumpCoords)
     {
-        FormDef def = new FormDef { Name = name, Key = key, FileName = file, Coords = coords, GuardCoords = guardCoords };
+        FormDef def = new FormDef { Name = name, Key = key, FileName = file, Coords = coords, GuardCoords = guardCoords, JumpCoords = jumpCoords };
         _forms.Add(def);
         _keyToForm[key] = def;
         if (name == "normal") _currentForm = def;
@@ -573,6 +663,59 @@ public class KirbyTaskbarBuddy : ApplicationContext
         return tile64;
     }
 
+    private static Bitmap[] ExtractJumpTiles(Bitmap rawSheet, Rectangle[] jumpCoords, Color bg0)
+    {
+        if (jumpCoords == null || jumpCoords.Length == 0) return null;
+        Bitmap[] tiles = new Bitmap[jumpCoords.Length];
+        int refBottomY = jumpCoords[0].Bottom - 1;
+
+        for (int i = 0; i < jumpCoords.Length; i++)
+        {
+            Rectangle r = jumpCoords[i];
+            int minX = r.Width, maxX = 0;
+            bool isFlip = (i == 1 || i == 2);
+            int yStart = isFlip ? 0 : Math.Max(0, r.Height - 4);
+            int yEnd = isFlip ? Math.Min(r.Height - 1, 10) : r.Height - 1;
+
+            for (int dy = yStart; dy <= yEnd; dy++)
+            {
+                for (int dx = 0; dx < r.Width; dx++)
+                {
+                    Color c = rawSheet.GetPixel(r.X + dx, r.Y + dy);
+                    if (!IsBgColor(c, bg0, bg0))
+                    {
+                        if (dx < minX) minX = dx;
+                        if (dx > maxX) maxX = dx;
+                    }
+                }
+            }
+
+            int bodyPivotX = (minX <= maxX) ? (minX + maxX) / 2 : r.Width / 2;
+            int destX = PIVOT_X - bodyPivotX;
+            int destY = PIVOT_Y - (refBottomY - r.Y);
+
+            Bitmap tile64 = new Bitmap(TILE_SIZE, TILE_SIZE, PixelFormat.Format32bppPArgb);
+            for (int dy = 0; dy < r.Height; dy++)
+            {
+                for (int dx = 0; dx < r.Width; dx++)
+                {
+                    Color c = rawSheet.GetPixel(r.X + dx, r.Y + dy);
+                    if (!IsBgColor(c, bg0, bg0))
+                    {
+                        int tx = destX + dx;
+                        int ty = destY + dy;
+                        if (tx >= 0 && tx < TILE_SIZE && ty >= 0 && ty < TILE_SIZE)
+                        {
+                            tile64.SetPixel(tx, ty, Color.FromArgb(255, c.R, c.G, c.B));
+                        }
+                    }
+                }
+            }
+            tiles[i] = tile64;
+        }
+        return tiles;
+    }
+
     private void LoadAllSpritesheets()
     {
         foreach (FormDef form in _forms)
@@ -608,6 +751,11 @@ public class KirbyTaskbarBuddy : ApplicationContext
                             form.RawGuardFrames64[i] = ExtractAlignedTile(rawSheet, gr, bg0, gCorner, true);
                         }
                     }
+                }
+
+                if (form.JumpCoords != null && form.JumpCoords.Length > 0)
+                {
+                    form.RawJumpFrames64 = ExtractJumpTiles(rawSheet, form.JumpCoords, bg0);
                 }
             }
         }
@@ -648,8 +796,13 @@ public class KirbyTaskbarBuddy : ApplicationContext
             {
                 foreach (Bitmap old in form.ScaledGuardFrames) if (old != null) old.Dispose();
             }
+            if (form.ScaledJumpFrames != null)
+            {
+                foreach (Bitmap old in form.ScaledJumpFrames) if (old != null) old.Dispose();
+            }
             form.ScaledFrames = ScaleTileArray(form.RawFrames64, targetSize);
             form.ScaledGuardFrames = ScaleTileArray(form.RawGuardFrames64, targetSize);
+            form.ScaledJumpFrames = ScaleTileArray(form.RawJumpFrames64, targetSize);
         }
         _lastRenderedForm = null;
     }
@@ -700,15 +853,27 @@ public class KirbyTaskbarBuddy : ApplicationContext
         int spriteSize = TILE_SIZE * _scale;
         int halfWidth = (TILE_SIZE / 2) * _scale;
 
-        // Check if mouse pointer is close to Kirby's body on the taskbar
+        // Check if mouse pointer is close to Kirby's body on the taskbar (only guards when on the ground)
         Point mouse = Cursor.Position;
         double kirbyCenterY = workArea.Bottom - (16 * _scale);
         double distX = Math.Abs(mouse.X - _kirbyX);
         double distY = Math.Abs(mouse.Y - kirbyCenterY);
-        bool isMouseNear = (distX <= 24 * _scale) && (distY <= 28 * _scale);
+        bool isMouseNear = !_isJumping && (distX <= 24 * _scale) && (distY <= 28 * _scale);
 
         double delta60 = dtSeconds * 60.0;
-        if (!isMouseNear)
+        if (_isJumping)
+        {
+            _kirbyX += 1.5 * delta60;
+            _jumpY += _jumpVelY * delta60;
+            _jumpVelY -= JUMP_GRAVITY * delta60;
+            if (_jumpY <= 0.0)
+            {
+                _jumpY = 0.0;
+                _jumpVelY = 0.0;
+                _isJumping = false;
+            }
+        }
+        else if (!isMouseNear)
         {
             _kirbyX += 1.5 * delta60;
             _animTime += 0.1 * delta60;
@@ -726,15 +891,28 @@ public class KirbyTaskbarBuddy : ApplicationContext
 
         if (_currentForm == null || _currentForm.ScaledFrames == null) return;
 
-        bool useGuard = isMouseNear && _currentForm.ScaledGuardFrames != null && _currentForm.ScaledGuardFrames.Length > 0;
-        Bitmap[] activeFrames = useGuard ? _currentForm.ScaledGuardFrames : _currentForm.ScaledFrames;
+        bool useJump = _isJumping && _currentForm.ScaledJumpFrames != null && _currentForm.ScaledJumpFrames.Length >= 5;
+        bool useGuard = !useJump && isMouseNear && _currentForm.ScaledGuardFrames != null && _currentForm.ScaledGuardFrames.Length > 0;
+        Bitmap[] activeFrames = useJump ? _currentForm.ScaledJumpFrames : (useGuard ? _currentForm.ScaledGuardFrames : _currentForm.ScaledFrames);
 
-        int frameCount = activeFrames.Length;
-        int frameIdx = ((int)Math.Floor(_animTime)) % frameCount;
-        if (frameIdx < 0) frameIdx += frameCount;
+        int frameIdx;
+        if (useJump)
+        {
+            if (_jumpVelY > 1.2) frameIdx = 0;       // Rising
+            else if (_jumpVelY > 0.0) frameIdx = 1;  // Apex somersault 1
+            else if (_jumpVelY > -1.2) frameIdx = 2; // Apex somersault 2
+            else if (_jumpVelY > -2.6) frameIdx = 3; // Early fall
+            else frameIdx = 4;                       // Full fall descent
+        }
+        else
+        {
+            int frameCount = activeFrames.Length;
+            frameIdx = ((int)Math.Floor(_animTime)) % frameCount;
+            if (frameIdx < 0) frameIdx += frameCount;
+        }
 
         int screenX = (int)Math.Round(_kirbyX) - halfWidth;
-        int screenY = workArea.Bottom - (PIVOT_Y + 1) * _scale;
+        int screenY = workArea.Bottom - (PIVOT_Y + 1) * _scale - (int)Math.Round(_jumpY * _scale);
 
         _topmostRefreshCounter++;
         if (_topmostRefreshCounter >= 60)
@@ -743,7 +921,7 @@ public class KirbyTaskbarBuddy : ApplicationContext
             SetWindowPos(_overlay.Handle, new IntPtr(-1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010);
         }
 
-        if (screenX != _lastRenderedX || screenY != _lastRenderedY || frameIdx != _lastRenderedFrameIdx || _currentForm != _lastRenderedForm || useGuard != _lastRenderedGuard)
+        if (screenX != _lastRenderedX || screenY != _lastRenderedY || frameIdx != _lastRenderedFrameIdx || _currentForm != _lastRenderedForm || useGuard != _lastRenderedGuard || useJump != _lastRenderedJump)
         {
             _overlay.UpdateSpriteFrame(activeFrames[frameIdx], screenX, screenY);
             _lastRenderedX = screenX;
@@ -751,6 +929,7 @@ public class KirbyTaskbarBuddy : ApplicationContext
             _lastRenderedFrameIdx = frameIdx;
             _lastRenderedForm = _currentForm;
             _lastRenderedGuard = useGuard;
+            _lastRenderedJump = useJump;
         }
         
     }
@@ -787,6 +966,17 @@ public class KirbyTaskbarBuddy : ApplicationContext
 
     private void HandleKeySwitch(string keyName)
     {
+        if (keyName == " ")
+        {
+            if (!_isJumping)
+            {
+                _isJumping = true;
+                _jumpY = 0.0;
+                _jumpVelY = JUMP_INIT_VEL;
+            }
+            return;
+        }
+
         FormDef target;
         if (_keyToForm.TryGetValue(keyName, out target))
         {

@@ -3,11 +3,7 @@ setlocal EnableDelayedExpansion
 pushd "%~dp0"
 
 echo Stopping running KirbyTaskbarBuddy...
-echo stop > ".stop"
-timeout /t 1 /nobreak >nul
 taskkill /f /im KirbyTaskbarBuddy.exe >nul 2>&1
-del /f /q ".stop" >nul 2>&1
-del /f /q ".KirbyTaskbarBuddy.prev.exe" >nul 2>&1
 
 set "RES_FLAGS="
 for %%F in (sprites\kirby-*.png) do (

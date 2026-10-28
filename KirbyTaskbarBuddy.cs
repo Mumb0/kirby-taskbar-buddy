@@ -238,20 +238,8 @@ public class KirbyTaskbarBuddy : ApplicationContext
         }
     }
 
-    private string _stopSignalPath;
-
     public KirbyTaskbarBuddy()
     {
-        string exeDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
-        _stopSignalPath = Path.Combine(exeDir, ".stop");
-        try { if (File.Exists(_stopSignalPath)) File.Delete(_stopSignalPath); } catch { }
-        try
-        {
-            string prevExe = Path.Combine(exeDir, ".KirbyTaskbarBuddy.prev.exe");
-            if (File.Exists(prevExe)) File.Delete(prevExe);
-        }
-        catch { }
-
         InitFormDefinitions();
         LoadAllSpritesheets();
 
@@ -830,13 +818,6 @@ public class KirbyTaskbarBuddy : ApplicationContext
 
     private void OnTick(object sender, EventArgs e)
     {
-        if (_stopSignalPath != null && File.Exists(_stopSignalPath))
-        {
-            try { File.Delete(_stopSignalPath); } catch { }
-            OnExit(null, EventArgs.Empty);
-            return;
-        }
-
         long nowMs = _stopwatch.ElapsedMilliseconds;
         double dtSeconds = (nowMs - _lastTickMs) / 1000.0;
         _lastTickMs = nowMs;

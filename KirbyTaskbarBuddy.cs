@@ -132,7 +132,8 @@ public class KirbyTaskbarBuddy : ApplicationContext
     private const int WM_SYSKEYDOWN = 0x0104;
     private const int WM_SYSKEYUP = 0x0105;
     private const string RUN_REG_KEY = @"Software\Microsoft\Windows\CurrentVersion\Run";
-    private const string APP_NAME = "KirbyWallpaperKeyBridge";
+    private const string APP_NAME = "KirbyTaskbarBuddy";
+    private const string LEGACY_APP_NAME = "KirbyWallpaperKeyBridge";
 
     private const int TILE_SIZE = 80;
     private const int PIVOT_X = 40;
@@ -1039,7 +1040,7 @@ public class KirbyTaskbarBuddy : ApplicationContext
         {
             using (RegistryKey key = Registry.CurrentUser.OpenSubKey(RUN_REG_KEY, false))
             {
-                return key != null && key.GetValue(APP_NAME) != null;
+                return key != null && (key.GetValue(APP_NAME) != null || key.GetValue(LEGACY_APP_NAME) != null);
             }
         }
         catch { return false; }
@@ -1051,14 +1052,19 @@ public class KirbyTaskbarBuddy : ApplicationContext
         {
             using (RegistryKey key = Registry.CurrentUser.OpenSubKey(RUN_REG_KEY, true))
             {
-                if (enable)
+                if (key != null)
                 {
-                    string exePath = Assembly.GetExecutingAssembly().Location;
-                    key.SetValue(APP_NAME, "\"" + exePath + "\"");
-                }
-                else
-                {
-                    key.DeleteValue(APP_NAME, false);
+                    try { key.DeleteValue(LEGACY_APP_NAME, false); } catch { }
+
+                    if (enable)
+                    {
+                        string exePath = Assembly.GetExecutingAssembly().Location;
+                        key.SetValue(APP_NAME, "\"" + exePath + "\"");
+                    }
+                    else
+                    {
+                        key.DeleteValue(APP_NAME, false);
+                    }
                 }
             }
         }

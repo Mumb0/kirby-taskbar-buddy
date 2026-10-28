@@ -130,5 +130,5 @@ The `build.bat` script automatically bundles all sprite resources into `KirbyTas
 - This is an unofficial, non-commercial fan-made desktop project.
 
 <p align="center">
-<img src="assets/kirby-jet.png" align="center" width="64" height="64" alt="Jet">
+<img src="assets/kirby-sleep.png" align="center" width="64" height="64" alt="Sleep">
 </p>

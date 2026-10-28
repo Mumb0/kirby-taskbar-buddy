@@ -2,7 +2,7 @@
 
 <p align="center">
   <strong>A lightweight, portable desktop companion that strolls along your Windows taskbar.</strong><br>
-  <em>Reacts to your typing with copy abilities, dodges your cursor, and leaps when you press space.</em>
+  <em>Reacts to your typing with copy abilities, dodges your cursor, leaps when you press space, and naps when you're away.</em>
 </p>
 
 <p align="center">
@@ -48,6 +48,14 @@ and somersault physics.
 Move your mouse cursor close to Kirby while he is on the taskbar, and he will immediately raise a
 defensive shield. Mirror Kirby even summons a shimmering hexagonal barrier.
 
+### Idle Sleep Mode
+
+When no keyboard or mouse activity is detected for a configurable period (5 minutes by default),
+Kirby halts in place, stands and blinks in his current copy ability, then puts on his sleepy hat,
+nods off, and curls up for a nap on your taskbar. Moving the mouse or pressing any key triggers his
+startled wake-up animation before he stands back up and continues walking with the ability he last
+possessed.
+
 ## Copy Ability Cheat Sheet
 
 Press any of the following keys anywhere on your system to transform Kirby:
@@ -77,9 +85,11 @@ Press any of the following keys anywhere on your system to transform Kirby:
 
 Right-click the Kirby icon in your Windows system tray (near the clock) to access settings:
 
+- **Show Foreground Taskbar Kirby:** Toggle Kirby's visibility on or off.
 - **Kirby Size:** Switch between **2x (Default)**, **3x (Large)**, and **4x (Extra Large)**
   pixel-perfect scaling.
-- **Show Foreground Taskbar Kirby:** Toggle Kirby's visibility on or off.
+- **Sleep Timer:** Choose how long Kirby waits before falling asleep (**10 Seconds**, **30 Seconds**,
+  **1 Minute**, **3 Minutes**, **5 Minutes (Default)**, **10 Minutes**, or **Never**).
 - **Pause Key Switching:** Keep Kirby walking without changing abilities as you type.
 - **Start with Windows:** Configure Kirby to start automatically when logging into Windows.
 - **Exit:** Gracefully closes the application.

@@ -13,7 +13,7 @@
 
 ---
 
-## <img src="assets/kirby-normal.png" width="28" height="28" alt=""> What is Kirby Taskbar Buddy?
+## <img src="assets/kirby-normal.png" width="64" height="64" valign="middle" alt=""> What is Kirby Taskbar Buddy?
 
 Kirby Taskbar Buddy is a desktop companion application built for Windows. Kirby hangs out right above your taskbar on your primary monitor, keeping you company as you work, study, or game.
 
@@ -23,24 +23,22 @@ Kirby Taskbar Buddy is a desktop companion application built for Windows. Kirby 
 
 ---
 
-## <img src="assets/kirby-fighter.png" width="28" height="28" alt=""> Features
+## <img src="assets/kirby-fighter.png" width="64" height="64" valign="middle" alt=""> Features
 
-### <img src="assets/kirby-sword.png" width="22" height="22" alt=""> Reactive Copy Abilities
+### <img src="assets/kirby-sword.png" width="64" height="64" valign="middle" alt=""> Reactive Copy Abilities
 As you type in any application (web browser, text editor, terminal, or chat), Kirby reacts to matching keys by dynamically transforming into one of **19 classic copy abilities**. Pressing the same ability key again returns him to Normal Kirby.
 
-### <img src="assets/kirby-wing.png" width="22" height="22" alt=""> Spacebar Jump
+### <img src="assets/kirby-wing.png" width="64" height="64" valign="middle" alt=""> Spacebar Jump
 Tapping <kbd>Space</kbd> anywhere on your system launches Kirby into the air with authentic gravity and somersault physics.
 
-### <img src="assets/kirby-mirror.png" width="22" height="22" alt=""> Cursor Danger Guard
+### <img src="assets/kirby-mirror.png" width="64" height="64" valign="middle" alt=""> Cursor Danger Guard
 Move your mouse cursor close to Kirby while he is on the taskbar, and he will immediately raise a defensive shield. Mirror Kirby even summons a shimmering hexagonal barrier.
 
 <p align="center">
   <img src="assets/abilities-showcase.png" alt="Kirby Abilities Showcase" style="max-width: 100%; height: auto;">
 </p>
 
----
-
-## <img src="assets/kirby-paint.png" width="28" height="28" alt=""> Copy Ability Cheat Sheet
+## <img src="assets/kirby-paint.png" width="64" height="64" valign="middle" alt=""> Copy Ability Cheat Sheet
 
 Press any of the following keys anywhere on your system to transform Kirby:
 
@@ -48,16 +46,16 @@ Press any of the following keys anywhere on your system to transform Kirby:
 
 | Icon | Ability | Key | Icon | Ability | Key |
 | :---: | :--- | :---: | :---: | :--- | :---: |
-| <img src="assets/kirby-normal.png" width="32" height="32" alt="Normal"> | Normal | <kbd>0</kbd> | <img src="assets/kirby-mirror.png" width="32" height="32" alt="Mirror"> | Mirror | <kbd>m</kbd> |
-| <img src="assets/kirby-beam.png" width="32" height="32" alt="Beam"> | Beam | <kbd>e</kbd> | <img src="assets/kirby-ninja.png" width="32" height="32" alt="Ninja"> | Ninja | <kbd>n</kbd> |
-| <img src="assets/kirby-bomb.png" width="32" height="32" alt="Bomb"> | Bomb | <kbd>b</kbd> | <img src="assets/kirby-paint.png" width="32" height="32" alt="Paint"> | Paint | <kbd>p</kbd> |
-| <img src="assets/kirby-cutter.png" width="32" height="32" alt="Cutter"> | Cutter | <kbd>c</kbd> | <img src="assets/kirby-parasol.png" width="32" height="32" alt="Parasol"> | Parasol | <kbd>r</kbd> |
-| <img src="assets/kirby-fighter.png" width="32" height="32" alt="Fighter"> | Fighter | <kbd>f</kbd> | <img src="assets/kirby-plasma.png" width="32" height="32" alt="Plasma"> | Plasma | <kbd>a</kbd> |
-| <img src="assets/kirby-fire.png" width="32" height="32" alt="Fire"> | Fire | <kbd>d</kbd> | <img src="assets/kirby-stone.png" width="32" height="32" alt="Stone"> | Stone | <kbd>s</kbd> |
-| <img src="assets/kirby-hammer.png" width="32" height="32" alt="Hammer"> | Hammer | <kbd>h</kbd> | <img src="assets/kirby-suplex.png" width="32" height="32" alt="Suplex"> | Suplex | <kbd>u</kbd> |
-| <img src="assets/kirby-ice.png" width="32" height="32" alt="Ice"> | Ice | <kbd>l</kbd> | <img src="assets/kirby-sword.png" width="32" height="32" alt="Sword"> | Sword | <kbd>w</kbd> |
-| <img src="assets/kirby-jet.png" width="32" height="32" alt="Jet"> | Jet | <kbd>j</kbd> | <img src="assets/kirby-wheel.png" width="32" height="32" alt="Wheel"> | Wheel | <kbd>v</kbd> |
-| <img src="assets/kirby-wing.png" width="32" height="32" alt="Wing"> | Wing | <kbd>g</kbd> | <img src="assets/kirby-yoyo.png" width="32" height="32" alt="Yo-Yo"> | Yo-Yo | <kbd>y</kbd> |
+| <img src="assets/kirby-normal.png" width="64" height="64" alt="Normal"> | Normal | <kbd>0</kbd> | <img src="assets/kirby-mirror.png" width="64" height="64" alt="Mirror"> | Mirror | <kbd>m</kbd> |
+| <img src="assets/kirby-beam.png" width="64" height="64" alt="Beam"> | Beam | <kbd>e</kbd> | <img src="assets/kirby-ninja.png" width="64" height="64" alt="Ninja"> | Ninja | <kbd>n</kbd> |
+| <img src="assets/kirby-bomb.png" width="64" height="64" alt="Bomb"> | Bomb | <kbd>b</kbd> | <img src="assets/kirby-paint.png" width="64" height="64" alt="Paint"> | Paint | <kbd>p</kbd> |
+| <img src="assets/kirby-cutter.png" width="64" height="64" alt="Cutter"> | Cutter | <kbd>c</kbd> | <img src="assets/kirby-parasol.png" width="64" height="64" alt="Parasol"> | Parasol | <kbd>r</kbd> |
+| <img src="assets/kirby-fighter.png" width="64" height="64" alt="Fighter"> | Fighter | <kbd>f</kbd> | <img src="assets/kirby-plasma.png" width="64" height="64" alt="Plasma"> | Plasma | <kbd>a</kbd> |
+| <img src="assets/kirby-fire.png" width="64" height="64" alt="Fire"> | Fire | <kbd>d</kbd> | <img src="assets/kirby-stone.png" width="64" height="64" alt="Stone"> | Stone | <kbd>s</kbd> |
+| <img src="assets/kirby-hammer.png" width="64" height="64" alt="Hammer"> | Hammer | <kbd>h</kbd> | <img src="assets/kirby-suplex.png" width="64" height="64" alt="Suplex"> | Suplex | <kbd>u</kbd> |
+| <img src="assets/kirby-ice.png" width="64" height="64" alt="Ice"> | Ice | <kbd>l</kbd> | <img src="assets/kirby-sword.png" width="64" height="64" alt="Sword"> | Sword | <kbd>w</kbd> |
+| <img src="assets/kirby-jet.png" width="64" height="64" alt="Jet"> | Jet | <kbd>j</kbd> | <img src="assets/kirby-wheel.png" width="64" height="64" alt="Wheel"> | Wheel | <kbd>v</kbd> |
+| <img src="assets/kirby-wing.png" width="64" height="64" alt="Wing"> | Wing | <kbd>g</kbd> | <img src="assets/kirby-yoyo.png" width="64" height="64" alt="Yo-Yo"> | Yo-Yo | <kbd>y</kbd> |
 
 </div>
 
@@ -67,7 +65,7 @@ Press any of the following keys anywhere on your system to transform Kirby:
 
 ---
 
-## <img src="assets/kirby-jet.png" width="28" height="28" alt=""> System Tray Controls
+## <img src="assets/kirby-jet.png" width="64" height="64" valign="middle" alt=""> System Tray Controls
 
 Right-click the Kirby icon in your Windows system tray (near the clock) to access settings:
 
@@ -79,7 +77,7 @@ Right-click the Kirby icon in your Windows system tray (near the clock) to acces
 
 ---
 
-## <img src="assets/kirby-stone.png" width="28" height="28" alt=""> Privacy and Security Guarantee
+## <img src="assets/kirby-stone.png" width="64" height="64" valign="middle" alt=""> Privacy and Security Guarantee
 
 Because Kirby reacts to your keystrokes, the application registers a low-level Windows keyboard hook (`WH_KEYBOARD_LL`).
 
@@ -89,7 +87,7 @@ Because Kirby reacts to your keystrokes, the application registers a low-level W
 
 ---
 
-## <img src="assets/kirby-parasol.png" width="28" height="28" alt=""> Installation
+## <img src="assets/kirby-parasol.png" width="64" height="64" valign="middle" alt=""> Installation
 
 1. Go to the [Releases](https://github.com/Mumb0/kirby-taskbar-buddy/releases) page on GitHub.
 2. Download `KirbyTaskbarBuddy.exe`.
@@ -97,7 +95,7 @@ Because Kirby reacts to your keystrokes, the application registers a low-level W
 
 ---
 
-## <img src="assets/kirby-hammer.png" width="28" height="28" alt=""> Building from Source
+## <img src="assets/kirby-hammer.png" width="64" height="64" valign="middle" alt=""> Building from Source
 
 To compile the standalone executable from source using Windows' built-in .NET C# compiler:
 
@@ -111,7 +109,7 @@ The `build.bat` script automatically bundles all sprite resources into `KirbyTas
 
 ---
 
-## <img src="assets/kirby-beam.png" width="28" height="28" alt=""> Disclaimer and Credits
+## <img src="assets/kirby-beam.png" width="64" height="64" valign="middle" alt=""> Disclaimer and Credits
 
 - Kirby and related character designs are trademarks of Nintendo and HAL Laboratory, Inc.
 - This is an unofficial, non-commercial fan-made desktop project.

@@ -12,6 +12,15 @@ using System.Threading;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
+public sealed class SpriteTile
+{
+    public int MinX;
+    public int MinY;
+    public int Width;
+    public int Height;
+    public int[] PremulPixels;
+}
+
 public class KirbyOverlayWindow : Form
 {
     private const int WS_EX_LAYERED = 0x00080000;
@@ -23,6 +32,16 @@ public class KirbyOverlayWindow : Form
     private const byte AC_SRC_OVER = 0x00;
     private const byte AC_SRC_ALPHA = 0x01;
     private const int ULW_ALPHA = 0x00000002;
+    private const int TILE_SIZE = 80;
+
+    private IntPtr _memDc = IntPtr.Zero;
+    private IntPtr _hDib = IntPtr.Zero;
+    private IntPtr _oldBmp = IntPtr.Zero;
+    private IntPtr _dibBits = IntPtr.Zero;
+    private int _dibSize = 0;
+    private SpriteTile _renderedTile = null;
+    private int _renderedScale = 0;
+    private Rectangle _dirtyRect = Rectangle.Empty;
 
     public KirbyOverlayWindow()
     {
@@ -48,43 +67,131 @@ public class KirbyOverlayWindow : Form
         }
     }
 
-    public void UpdateSpriteFrame(Bitmap frameBmp, int screenX, int screenY)
+    private void FreeDib()
     {
-        if (IsDisposed || !IsHandleCreated || frameBmp == null) return;
+        if (_memDc != IntPtr.Zero)
+        {
+            if (_oldBmp != IntPtr.Zero)
+            {
+                SelectObject(_memDc, _oldBmp);
+                _oldBmp = IntPtr.Zero;
+            }
+            if (_hDib != IntPtr.Zero)
+            {
+                DeleteObject(_hDib);
+                _hDib = IntPtr.Zero;
+            }
+            DeleteDC(_memDc);
+            _memDc = IntPtr.Zero;
+        }
+        _dibBits = IntPtr.Zero;
+        _dibSize = 0;
+        _renderedTile = null;
+        _dirtyRect = Rectangle.Empty;
+    }
+
+    private void EnsureDib(int targetSize)
+    {
+        if (_memDc != IntPtr.Zero && _dibSize == targetSize && _dibBits != IntPtr.Zero) return;
+
+        FreeDib();
 
         IntPtr screenDc = GetDC(IntPtr.Zero);
-        IntPtr memDc = CreateCompatibleDC(screenDc);
-        IntPtr hBitmap = IntPtr.Zero;
-        IntPtr oldBitmap = IntPtr.Zero;
-
         try
         {
-            hBitmap = frameBmp.GetHbitmap(Color.FromArgb(0));
-            oldBitmap = SelectObject(memDc, hBitmap);
+            _memDc = CreateCompatibleDC(screenDc);
+            BITMAPINFO bmi = new BITMAPINFO();
+            bmi.bmiHeader.biSize = Marshal.SizeOf(typeof(BITMAPINFOHEADER));
+            bmi.bmiHeader.biWidth = targetSize;
+            bmi.bmiHeader.biHeight = -targetSize; // Top-down DIB
+            bmi.bmiHeader.biPlanes = 1;
+            bmi.bmiHeader.biBitCount = 32;
+            bmi.bmiHeader.biCompression = 0; // BI_RGB
 
-            SIZE size = new SIZE { cx = frameBmp.Width, cy = frameBmp.Height };
-            POINT pointSource = new POINT { x = 0, y = 0 };
-            POINT topPos = new POINT { x = screenX, y = screenY };
-            BLENDFUNCTION blend = new BLENDFUNCTION
+            _hDib = CreateDIBSection(_memDc, ref bmi, 0, out _dibBits, IntPtr.Zero, 0);
+            if (_hDib != IntPtr.Zero)
             {
-                BlendOp = AC_SRC_OVER,
-                BlendFlags = 0,
-                SourceConstantAlpha = 255,
-                AlphaFormat = AC_SRC_ALPHA
-            };
-
-            UpdateLayeredWindow(Handle, screenDc, ref topPos, ref size, memDc, ref pointSource, 0, ref blend, ULW_ALPHA);
+                _oldBmp = SelectObject(_memDc, _hDib);
+                _dibSize = targetSize;
+            }
         }
         finally
         {
             ReleaseDC(IntPtr.Zero, screenDc);
-            if (hBitmap != IntPtr.Zero)
-            {
-                SelectObject(memDc, oldBitmap);
-                DeleteObject(hBitmap);
-            }
-            DeleteDC(memDc);
         }
+    }
+
+    public void UpdateSpriteFrame(SpriteTile tile, int scale, int screenX, int screenY)
+    {
+        if (IsDisposed || !IsHandleCreated || tile == null) return;
+
+        int targetSize = TILE_SIZE * scale;
+        EnsureDib(targetSize);
+        if (_memDc == IntPtr.Zero || _dibBits == IntPtr.Zero) return;
+
+        if (tile != _renderedTile || scale != _renderedScale)
+        {
+            if (!_dirtyRect.IsEmpty)
+            {
+                int clearRight = Math.Min(targetSize, _dirtyRect.Right);
+                int clearBottom = Math.Min(targetSize, _dirtyRect.Bottom);
+                for (int y = Math.Max(0, _dirtyRect.Top); y < clearBottom; y++)
+                {
+                    int rowBase = (y * targetSize) << 2;
+                    for (int x = Math.Max(0, _dirtyRect.Left); x < clearRight; x++)
+                    {
+                        Marshal.WriteInt32(_dibBits, rowBase + (x << 2), 0);
+                    }
+                }
+            }
+
+            int startX = tile.MinX * scale;
+            int startY = tile.MinY * scale;
+            int srcIdx = 0;
+            for (int sy = 0; sy < tile.Height; sy++)
+            {
+                int baseY = startY + sy * scale;
+                for (int sx = 0; sx < tile.Width; sx++)
+                {
+                    int c = tile.PremulPixels[srcIdx++];
+                    if (c != 0)
+                    {
+                        int baseX = startX + sx * scale;
+                        for (int dy = 0; dy < scale; dy++)
+                        {
+                            int rowOffset = ((baseY + dy) * targetSize + baseX) << 2;
+                            for (int dx = 0; dx < scale; dx++)
+                            {
+                                Marshal.WriteInt32(_dibBits, rowOffset + (dx << 2), c);
+                            }
+                        }
+                    }
+                }
+            }
+
+            _dirtyRect = new Rectangle(startX, startY, tile.Width * scale, tile.Height * scale);
+            _renderedTile = tile;
+            _renderedScale = scale;
+        }
+
+        SIZE size = new SIZE { cx = targetSize, cy = targetSize };
+        POINT pointSource = new POINT { x = 0, y = 0 };
+        POINT topPos = new POINT { x = screenX, y = screenY };
+        BLENDFUNCTION blend = new BLENDFUNCTION
+        {
+            BlendOp = AC_SRC_OVER,
+            BlendFlags = 0,
+            SourceConstantAlpha = 255,
+            AlphaFormat = AC_SRC_ALPHA
+        };
+
+        UpdateLayeredWindow(Handle, IntPtr.Zero, ref topPos, ref size, _memDc, ref pointSource, 0, ref blend, ULW_ALPHA);
+    }
+
+    protected override void Dispose(bool disposing)
+    {
+        FreeDib();
+        base.Dispose(disposing);
     }
 
     [StructLayout(LayoutKind.Sequential)]
@@ -100,6 +207,29 @@ public class KirbyOverlayWindow : Form
         public byte BlendFlags;
         public byte SourceConstantAlpha;
         public byte AlphaFormat;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct BITMAPINFOHEADER
+    {
+        public int biSize;
+        public int biWidth;
+        public int biHeight;
+        public short biPlanes;
+        public short biBitCount;
+        public int biCompression;
+        public int biSizeImage;
+        public int biXPelsPerMeter;
+        public int biYPelsPerMeter;
+        public int biClrUsed;
+        public int biClrImportant;
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct BITMAPINFO
+    {
+        public BITMAPINFOHEADER bmiHeader;
+        public int bmiColors;
     }
 
     [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
@@ -122,6 +252,9 @@ public class KirbyOverlayWindow : Form
 
     [DllImport("gdi32.dll", ExactSpelling = true, SetLastError = true)]
     private static extern bool DeleteObject(IntPtr hObject);
+
+    [DllImport("gdi32.dll", ExactSpelling = true, SetLastError = true)]
+    private static extern IntPtr CreateDIBSection(IntPtr hdc, [In] ref BITMAPINFO pbmi, uint iUsage, out IntPtr ppvBits, IntPtr hSection, uint dwOffset);
 }
 
 public class KirbyTaskbarBuddy : ApplicationContext
@@ -175,14 +308,56 @@ public class KirbyTaskbarBuddy : ApplicationContext
         public Rectangle[] GuardCoords;
         public Rectangle[] JumpCoords;
         public Rectangle[] StandCoords;
-        public Bitmap[] RawFrames64;
-        public Bitmap[] ScaledFrames;
-        public Bitmap[] RawGuardFrames64;
-        public Bitmap[] ScaledGuardFrames;
-        public Bitmap[] RawJumpFrames64;
-        public Bitmap[] ScaledJumpFrames;
-        public Bitmap[] RawStandFrames64;
-        public Bitmap[] ScaledStandFrames;
+        public SpriteTile[] Frames;
+        public SpriteTile[] GuardFrames;
+        public SpriteTile[] JumpFrames;
+        public SpriteTile[] StandFrames;
+    }
+
+    private sealed class FastSheet : IDisposable
+    {
+        private Stream _stream;
+        private Bitmap _bmp;
+        private BitmapData _data;
+        private IntPtr _scan0;
+        private int _stride;
+        public readonly int Width;
+        public readonly int Height;
+
+        public FastSheet(Stream stream, Bitmap bmp, int lockWidth, int lockHeight)
+        {
+            _stream = stream;
+            _bmp = bmp;
+            Width = Math.Min(bmp.Width, Math.Max(1, lockWidth));
+            Height = Math.Min(bmp.Height, Math.Max(1, lockHeight));
+            _data = bmp.LockBits(new Rectangle(0, 0, Width, Height), ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+            _scan0 = _data.Scan0;
+            _stride = _data.Stride;
+        }
+
+        public int GetPixel(int x, int y)
+        {
+            return Marshal.ReadInt32(_scan0, y * _stride + (x << 2));
+        }
+
+        public void Dispose()
+        {
+            if (_bmp != null)
+            {
+                if (_data != null)
+                {
+                    try { _bmp.UnlockBits(_data); } catch { }
+                    _data = null;
+                }
+                _bmp.Dispose();
+                _bmp = null;
+            }
+            if (_stream != null)
+            {
+                _stream.Dispose();
+                _stream = null;
+            }
+        }
     }
 
     private readonly List<FormDef> _forms = new List<FormDef>();
@@ -220,8 +395,7 @@ public class KirbyTaskbarBuddy : ApplicationContext
     private static readonly int[] _wakeUpSeq = new int[] { 6, 7, 6, 7, 6, 7 };
     private static readonly int[] _postWakeStandSeq = new int[] { 0, 1, 0 };
 
-    private Bitmap[] _rawSleepFrames64;
-    private Bitmap[] _scaledSleepFrames;
+    private SpriteTile[] _sleepFrames;
     private SleepState _sleepState = SleepState.Awake;
     private double _sleepAnimTime = 0.0;
     private long _lastInputMs = 0;
@@ -235,8 +409,14 @@ public class KirbyTaskbarBuddy : ApplicationContext
     private double _jumpVelY = 0.0;
     private int _lastRenderedX = int.MinValue;
     private int _lastRenderedY = int.MinValue;
-    private Bitmap _lastRenderedBitmap = null;
+    private SpriteTile _lastRenderedTile = null;
     private int _topmostRefreshCounter = 0;
+    private int _envCheckCounter = 0;
+    private bool _isFullscreenCached = false;
+    private Rectangle _cachedWorkArea;
+    private readonly StringBuilder _classNameSb = new StringBuilder(64);
+    private IntPtr _trayIconHandle = IntPtr.Zero;
+    private Icon _loadedTrayIcon = null;
 
     [STAThread]
     public static void Main(string[] args)
@@ -337,6 +517,7 @@ public class KirbyTaskbarBuddy : ApplicationContext
 
         _overlay = new KirbyOverlayWindow();
         _overlay.Show();
+        _cachedWorkArea = Screen.PrimaryScreen.WorkingArea;
 
         _stopwatch = Stopwatch.StartNew();
         _lastTickMs = _stopwatch.ElapsedMilliseconds;
@@ -351,6 +532,8 @@ public class KirbyTaskbarBuddy : ApplicationContext
 
         _proc = HookCallback;
         _hookID = SetWindowsHookEx(WH_KEYBOARD_LL, _proc, GetModuleHandle(null), 0);
+
+        TrimMemory();
     }
 
     private void InitFormDefinitions()
@@ -613,14 +796,24 @@ public class KirbyTaskbarBuddy : ApplicationContext
         if (name == "normal") _currentForm = def;
     }
 
-    private Bitmap OpenSpriteBitmap(string fileName)
+    private static void ExpandBounds(Rectangle[] rects, ref int maxW, ref int maxH)
+    {
+        if (rects == null) return;
+        for (int i = 0; i < rects.Length; i++)
+        {
+            if (rects[i].Right > maxW) maxW = rects[i].Right;
+            if (rects[i].Bottom > maxH) maxH = rects[i].Bottom;
+        }
+    }
+
+    private FastSheet OpenSpriteSheet(string fileName, int reqW, int reqH)
     {
         try
         {
             Stream resStream = Assembly.GetExecutingAssembly().GetManifestResourceStream(fileName);
             if (resStream != null)
             {
-                return new Bitmap(resStream);
+                return new FastSheet(resStream, new Bitmap(resStream), reqW, reqH);
             }
         }
         catch { }
@@ -628,18 +821,61 @@ public class KirbyTaskbarBuddy : ApplicationContext
         string exeDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
         string path = Path.Combine(exeDir, "sprites", fileName);
         if (!File.Exists(path)) path = Path.Combine(exeDir, fileName);
-        if (File.Exists(path)) return new Bitmap(path);
+        if (File.Exists(path)) return new FastSheet(null, new Bitmap(path), reqW, reqH);
         return null;
     }
 
-    private static Bitmap ExtractAlignedTile(Bitmap rawSheet, Rectangle r, Color bg0, Color bgCorner, bool isGuard = false)
+    private static int MakePremulArgb(int a, int r, int g, int b)
+    {
+        if (a <= 0) return 0;
+        if (a >= 255) return (255 << 24) | (r << 16) | (g << 8) | b;
+        int pr = (r * a + 127) / 255;
+        int pg = (g * a + 127) / 255;
+        int pb = (b * a + 127) / 255;
+        return (a << 24) | (pr << 16) | (pg << 8) | pb;
+    }
+
+    private static SpriteTile BuildSpriteTile(int[] scratchTile)
+    {
+        int minX = TILE_SIZE, maxX = -1, minY = TILE_SIZE, maxY = -1;
+        for (int y = 0; y < TILE_SIZE; y++)
+        {
+            int row = y * TILE_SIZE;
+            for (int x = 0; x < TILE_SIZE; x++)
+            {
+                if (scratchTile[row + x] != 0)
+                {
+                    if (x < minX) minX = x;
+                    if (x > maxX) maxX = x;
+                    if (y < minY) minY = y;
+                    if (y > maxY) maxY = y;
+                }
+            }
+        }
+
+        if (maxX < minX || maxY < minY)
+        {
+            return new SpriteTile { MinX = 0, MinY = 0, Width = 1, Height = 1, PremulPixels = new int[1] };
+        }
+
+        int w = maxX - minX + 1;
+        int h = maxY - minY + 1;
+        int[] pixels = new int[w * h];
+        for (int sy = 0; sy < h; sy++)
+        {
+            Array.Copy(scratchTile, (minY + sy) * TILE_SIZE + minX, pixels, sy * w, w);
+        }
+        return new SpriteTile { MinX = minX, MinY = minY, Width = w, Height = h, PremulPixels = pixels };
+    }
+
+    private static SpriteTile ExtractAlignedTile(FastSheet rawSheet, Rectangle r, int bg0, int bgCorner, int[] scratch, bool isGuard = false)
     {
         int maxY = r.Height - 1;
         for (int dy = 0; dy < r.Height; dy++)
         {
             for (int dx = 0; dx < r.Width; dx++)
             {
-                Color c = rawSheet.GetPixel(r.X + dx, r.Y + dy);
+                int c = rawSheet.GetPixel(r.X + dx, r.Y + dy);
                 if (!IsBgColor(c, bg0, bgCorner)) maxY = dy;
             }
         }
@@ -650,7 +886,7 @@ public class KirbyTaskbarBuddy : ApplicationContext
         {
             for (int dx = 0; dx < r.Width; dx++)
             {
-                Color c = rawSheet.GetPixel(r.X + dx, r.Y + dy);
+                int c = rawSheet.GetPixel(r.X + dx, r.Y + dy);
                 if (!IsBgColor(c, bg0, bgCorner))
                 {
                     if ((!isGuard || dy >= maxY - 1) && dx < feetMinX) feetMinX = dx;
@@ -663,33 +899,33 @@ public class KirbyTaskbarBuddy : ApplicationContext
         int destX = PIVOT_X - bodyPivotX;
         int destY = PIVOT_Y - maxY;
 
-        Bitmap tile64 = new Bitmap(TILE_SIZE, TILE_SIZE, PixelFormat.Format32bppPArgb);
+        Array.Clear(scratch, 0, scratch.Length);
         for (int dy = 0; dy < r.Height; dy++)
         {
             for (int dx = 0; dx < r.Width; dx++)
             {
-                Color c = rawSheet.GetPixel(r.X + dx, r.Y + dy);
+                int c = rawSheet.GetPixel(r.X + dx, r.Y + dy);
                 if (!IsBgColor(c, bg0, bgCorner))
                 {
                     int tx = destX + dx;
                     int ty = destY + dy;
                     if (tx >= 0 && tx < TILE_SIZE && ty >= 0 && ty < TILE_SIZE)
                     {
-                        tile64.SetPixel(tx, ty, Color.FromArgb(255, c.R, c.G, c.B));
+                        scratch[ty * TILE_SIZE + tx] = (255 << 24) | (c & 0x00FFFFFF);
                     }
                 }
             }
         }
-        return tile64;
+        return BuildSpriteTile(scratch);
     }
 
-    private static Bitmap ExtractMirrorGuardTile(Bitmap rawSheet, Rectangle rainRect, Color bg0)
+    private static SpriteTile ExtractMirrorGuardTile(FastSheet rawSheet, Rectangle rainRect, int bg0, int[] scratch)
     {
         Rectangle kirbyRect = new Rectangle(37, 880, 31, 27);
         Rectangle bubbleRect = new Rectangle(2, 877, 32, 34);
-        Color kirbyCorner = rawSheet.GetPixel(kirbyRect.X, kirbyRect.Y);
-        Color rainCorner = rawSheet.GetPixel(rainRect.X, rainRect.Y);
-        Color bubbleCorner = rawSheet.GetPixel(bubbleRect.X, bubbleRect.Y);
+        int kirbyCorner = rawSheet.GetPixel(kirbyRect.X, kirbyRect.Y);
+        int rainCorner = rawSheet.GetPixel(rainRect.X, rainRect.Y);
+        int bubbleCorner = rawSheet.GetPixel(bubbleRect.X, bubbleRect.Y);
 
         // Place Guard Mirror Kirby at his exact floor-aligned position (bodyPivotX=17, maxY=25)
         // and center the 30x32 bubble symmetrically around him (extending 3px below his feet)
@@ -698,13 +934,13 @@ public class KirbyTaskbarBuddy : ApplicationContext
         int sphereDestX = kirbyDestX;
         int sphereDestY = kirbyDestY - 4;
 
-        Bitmap tile64 = new Bitmap(TILE_SIZE, TILE_SIZE, PixelFormat.Format32bppPArgb);
+        Array.Clear(scratch, 0, scratch.Length);
 
         for (int dy = 0; dy < rainRect.Height; dy++)
         {
             for (int dx = 0; dx < rainRect.Width; dx++)
             {
-                Color rc = rawSheet.GetPixel(rainRect.X + dx, rainRect.Y + dy);
+                int rc = rawSheet.GetPixel(rainRect.X + dx, rainRect.Y + dy);
                 if (IsBgColor(rc, bg0, rainCorner)) continue;
 
                 int tx = sphereDestX + dx;
@@ -714,54 +950,63 @@ public class KirbyTaskbarBuddy : ApplicationContext
                 int kdx = tx - kirbyDestX;
                 int kdy = ty - kirbyDestY;
                 bool hasKirby = false;
-                Color kc = Color.Empty;
+                int kc = 0;
                 if (kdx >= 0 && kdx < kirbyRect.Width && kdy >= 0 && kdy < kirbyRect.Height)
                 {
                     kc = rawSheet.GetPixel(kirbyRect.X + kdx, kirbyRect.Y + kdy);
                     if (!IsBgColor(kc, bg0, kirbyCorner)) hasKirby = true;
                 }
 
-                Color bc = rawSheet.GetPixel(bubbleRect.X + dx, bubbleRect.Y + dy);
+                int bc = rawSheet.GetPixel(bubbleRect.X + dx, bubbleRect.Y + dy);
                 bool hasBubbleRim = !IsBgColor(bc, bg0, bubbleCorner);
                 if (hasBubbleRim)
                 {
+                    int br = (bc >> 16) & 0xFF;
+                    int bg = (bc >> 8) & 0xFF;
+                    int bb = bc & 0xFF;
                     // Clean up orange/magenta pixels on the bubble rim into crisp sky-blue
-                    if (bc.R > 180 && bc.G < 200)
+                    if (br > 180 && bg < 200)
                     {
-                        bc = Color.FromArgb(255, 80, 180, 248);
+                        br = 80; bg = 180; bb = 248;
                     }
-                    tile64.SetPixel(tx, ty, Color.FromArgb(245, bc.R, bc.G, bc.B));
+                    scratch[ty * TILE_SIZE + tx] = MakePremulArgb(245, br, bg, bb);
                 }
                 else
                 {
+                    int rr = (rc >> 16) & 0xFF;
+                    int rg = (rc >> 8) & 0xFF;
+                    int rb = rc & 0xFF;
                     // Smooth out the 3 pure-white stripe bands between Orange and Yellow into warm golden-amber
-                    if (rc.R >= 248 && rc.G >= 248 && rc.B >= 248)
+                    if (rr >= 248 && rg >= 248 && rb >= 248)
                     {
-                        rc = Color.FromArgb(255, 248, 200, 64);
+                        rr = 248; rg = 200; rb = 64;
                     }
 
                     if (hasKirby)
                     {
-                        int nr = (int)(kc.R * 0.55 + rc.R * 0.45);
-                        int ng = (int)(kc.G * 0.55 + rc.G * 0.45);
-                        int nb = (int)(kc.B * 0.55 + rc.B * 0.45);
-                        tile64.SetPixel(tx, ty, Color.FromArgb(255, nr, ng, nb));
+                        int kr = (kc >> 16) & 0xFF;
+                        int kg = (kc >> 8) & 0xFF;
+                        int kb = kc & 0xFF;
+                        int nr = (int)(kr * 0.55 + rr * 0.45);
+                        int ng = (int)(kg * 0.55 + rg * 0.45);
+                        int nb = (int)(kb * 0.55 + rb * 0.45);
+                        scratch[ty * TILE_SIZE + tx] = MakePremulArgb(255, nr, ng, nb);
                     }
                     else
                     {
-                        tile64.SetPixel(tx, ty, Color.FromArgb(175, rc.R, rc.G, rc.B));
+                        scratch[ty * TILE_SIZE + tx] = MakePremulArgb(175, rr, rg, rb);
                     }
                 }
             }
         }
 
-        return tile64;
+        return BuildSpriteTile(scratch);
     }
 
-    private static Bitmap[] ExtractJumpTiles(Bitmap rawSheet, Rectangle[] jumpCoords, Color bg0)
+    private static SpriteTile[] ExtractJumpTiles(FastSheet rawSheet, Rectangle[] jumpCoords, int bg0, int[] scratch)
     {
         if (jumpCoords == null || jumpCoords.Length == 0) return null;
-        Bitmap[] tiles = new Bitmap[jumpCoords.Length];
+        SpriteTile[] tiles = new SpriteTile[jumpCoords.Length];
         int refBottomY = jumpCoords[0].Bottom - 1;
 
         for (int i = 0; i < jumpCoords.Length; i++)
@@ -776,7 +1021,7 @@ public class KirbyTaskbarBuddy : ApplicationContext
             {
                 for (int dx = 0; dx < r.Width; dx++)
                 {
-                    Color c = rawSheet.GetPixel(r.X + dx, r.Y + dy);
+                    int c = rawSheet.GetPixel(r.X + dx, r.Y + dy);
                     if (!IsBgColor(c, bg0, bg0))
                     {
                         if (dx < minX) minX = dx;
@@ -789,192 +1034,171 @@ public class KirbyTaskbarBuddy : ApplicationContext
             int destX = PIVOT_X - bodyPivotX;
             int destY = PIVOT_Y - (refBottomY - r.Y);
 
-            Bitmap tile64 = new Bitmap(TILE_SIZE, TILE_SIZE, PixelFormat.Format32bppPArgb);
+            Array.Clear(scratch, 0, scratch.Length);
             for (int dy = 0; dy < r.Height; dy++)
             {
                 for (int dx = 0; dx < r.Width; dx++)
                 {
-                    Color c = rawSheet.GetPixel(r.X + dx, r.Y + dy);
+                    int c = rawSheet.GetPixel(r.X + dx, r.Y + dy);
                     if (!IsBgColor(c, bg0, bg0))
                     {
                         int tx = destX + dx;
                         int ty = destY + dy;
                         if (tx >= 0 && tx < TILE_SIZE && ty >= 0 && ty < TILE_SIZE)
                         {
-                            tile64.SetPixel(tx, ty, Color.FromArgb(255, c.R, c.G, c.B));
+                            scratch[ty * TILE_SIZE + tx] = (255 << 24) | (c & 0x00FFFFFF);
                         }
                     }
                 }
             }
-            tiles[i] = tile64;
+            tiles[i] = BuildSpriteTile(scratch);
         }
         return tiles;
     }
 
-    private static Bitmap ExtractSleepTile(Bitmap rawSheet, Rectangle r, Color bg0)
+    private static SpriteTile ExtractSleepTile(FastSheet rawSheet, Rectangle r, int bg0, int[] scratch)
     {
-        Color bgCorner = rawSheet.GetPixel(r.X, r.Y);
+        int bgCorner = rawSheet.GetPixel(r.X, r.Y);
         int destX = PIVOT_X - 18;
         int destY = PIVOT_Y - (r.Height - 1);
 
-        Bitmap tile64 = new Bitmap(TILE_SIZE, TILE_SIZE, PixelFormat.Format32bppPArgb);
+        Array.Clear(scratch, 0, scratch.Length);
         for (int dy = 0; dy < r.Height; dy++)
         {
             for (int dx = 0; dx < r.Width; dx++)
             {
-                Color c = rawSheet.GetPixel(r.X + dx, r.Y + dy);
+                int c = rawSheet.GetPixel(r.X + dx, r.Y + dy);
                 if (!IsBgColor(c, bg0, bgCorner))
                 {
                     int tx = destX + dx;
                     int ty = destY + dy;
                     if (tx >= 0 && tx < TILE_SIZE && ty >= 0 && ty < TILE_SIZE)
                     {
-                        tile64.SetPixel(tx, ty, Color.FromArgb(255, c.R, c.G, c.B));
+                        scratch[ty * TILE_SIZE + tx] = (255 << 24) | (c & 0x00FFFFFF);
                     }
                 }
             }
         }
-        return tile64;
+        return BuildSpriteTile(scratch);
+    }
+
+    private void ExtractTrayIconFromNormalSheet(FastSheet normalSheet, int bg0)
+    {
+        try
+        {
+            using (Bitmap crop = new Bitmap(24, 24, PixelFormat.Format32bppArgb))
+            {
+                int bgRgb = bg0 & 0x00FFFFFF;
+                for (int y = 0; y < 24; y++)
+                {
+                    for (int x = 0; x < 24; x++)
+                    {
+                        int c = normalSheet.GetPixel(32 + x, 125 + y);
+                        if ((c & 0x00FFFFFF) == bgRgb)
+                            crop.SetPixel(x, y, Color.Transparent);
+                        else
+                            crop.SetPixel(x, y, Color.FromArgb(255, (c >> 16) & 0xFF, (c >> 8) & 0xFF, c & 0xFF));
+                    }
+                }
+                _trayIconHandle = crop.GetHicon();
+                _loadedTrayIcon = Icon.FromHandle(_trayIconHandle);
+            }
+        }
+        catch { }
     }
 
     private void LoadAllSpritesheets()
     {
+        int[] scratch = new int[TILE_SIZE * TILE_SIZE];
+
         foreach (FormDef form in _forms)
         {
-            using (Bitmap rawSheet = OpenSpriteBitmap(form.FileName))
+            int reqW = 64, reqH = 160;
+            ExpandBounds(form.Coords, ref reqW, ref reqH);
+            ExpandBounds(form.GuardCoords, ref reqW, ref reqH);
+            ExpandBounds(form.JumpCoords, ref reqW, ref reqH);
+            ExpandBounds(form.StandCoords, ref reqW, ref reqH);
+
+            using (FastSheet rawSheet = OpenSpriteSheet(form.FileName, reqW, reqH))
             {
                 if (rawSheet == null) continue;
-                Color bg0 = rawSheet.GetPixel(0, 0);
-                Color bgCorner = rawSheet.GetPixel(form.Coords[0].X, form.Coords[0].Y);
+                int bg0 = rawSheet.GetPixel(0, 0);
+                int bgCorner = rawSheet.GetPixel(form.Coords[0].X, form.Coords[0].Y);
 
-                Bitmap[] base4 = new Bitmap[form.Coords.Length];
-                for (int i = 0; i < form.Coords.Length; i++)
+                if (form.Name == "normal" && _loadedTrayIcon == null)
                 {
-                    base4[i] = ExtractAlignedTile(rawSheet, form.Coords[i], bg0, bgCorner);
+                    ExtractTrayIconFromNormalSheet(rawSheet, bg0);
                 }
 
-                // 6-frame ping-pong walk cycle [0, 1, 2, 3, 2, 1]
-                form.RawFrames64 = new Bitmap[] { base4[0], base4[1], base4[2], base4[3], base4[2], base4[1] };
+                SpriteTile[] base4 = new SpriteTile[form.Coords.Length];
+                for (int i = 0; i < form.Coords.Length; i++)
+                {
+                    base4[i] = ExtractAlignedTile(rawSheet, form.Coords[i], bg0, bgCorner, scratch);
+                }
+
+                // 6-frame ping-pong walk cycle [0, 1, 2, 3, 2, 1] reusing tile references
+                form.Frames = new SpriteTile[] { base4[0], base4[1], base4[2], base4[3], base4[2], base4[1] };
 
                 if (form.GuardCoords != null && form.GuardCoords.Length > 0)
                 {
-                    form.RawGuardFrames64 = new Bitmap[form.GuardCoords.Length];
+                    form.GuardFrames = new SpriteTile[form.GuardCoords.Length];
                     for (int i = 0; i < form.GuardCoords.Length; i++)
                     {
                         Rectangle gr = form.GuardCoords[i];
                         if (form.Name == "mirror")
                         {
-                            form.RawGuardFrames64[i] = ExtractMirrorGuardTile(rawSheet, gr, bg0);
+                            form.GuardFrames[i] = ExtractMirrorGuardTile(rawSheet, gr, bg0, scratch);
                         }
                         else
                         {
-                            Color gCorner = rawSheet.GetPixel(gr.X, gr.Y);
-                            form.RawGuardFrames64[i] = ExtractAlignedTile(rawSheet, gr, bg0, gCorner, true);
+                            int gCorner = rawSheet.GetPixel(gr.X, gr.Y);
+                            form.GuardFrames[i] = ExtractAlignedTile(rawSheet, gr, bg0, gCorner, scratch, true);
                         }
                     }
                 }
 
                 if (form.JumpCoords != null && form.JumpCoords.Length > 0)
                 {
-                    form.RawJumpFrames64 = ExtractJumpTiles(rawSheet, form.JumpCoords, bg0);
+                    form.JumpFrames = ExtractJumpTiles(rawSheet, form.JumpCoords, bg0, scratch);
                 }
 
                 if (form.StandCoords != null && form.StandCoords.Length > 0)
                 {
-                    form.RawStandFrames64 = new Bitmap[form.StandCoords.Length];
+                    form.StandFrames = new SpriteTile[form.StandCoords.Length];
                     for (int i = 0; i < form.StandCoords.Length; i++)
                     {
                         Rectangle sr = form.StandCoords[i];
-                        Color sCorner = rawSheet.GetPixel(sr.X, sr.Y);
-                        form.RawStandFrames64[i] = ExtractAlignedTile(rawSheet, sr, bg0, sCorner);
+                        int sCorner = rawSheet.GetPixel(sr.X, sr.Y);
+                        form.StandFrames[i] = ExtractAlignedTile(rawSheet, sr, bg0, sCorner, scratch);
                     }
                 }
             }
         }
 
-        using (Bitmap sleepSheet = OpenSpriteBitmap("kirby-sleep.png"))
+        int sleepW = 1, sleepH = 1;
+        ExpandBounds(_sleepCoords, ref sleepW, ref sleepH);
+        using (FastSheet sleepSheet = OpenSpriteSheet("kirby-sleep.png", sleepW, sleepH))
         {
             if (sleepSheet != null)
             {
-                Color bg0 = sleepSheet.GetPixel(0, 0);
-                _rawSleepFrames64 = new Bitmap[_sleepCoords.Length];
+                int bg0 = sleepSheet.GetPixel(0, 0);
+                _sleepFrames = new SpriteTile[_sleepCoords.Length];
                 for (int i = 0; i < _sleepCoords.Length; i++)
                 {
-                    _rawSleepFrames64[i] = ExtractSleepTile(sleepSheet, _sleepCoords[i], bg0);
+                    _sleepFrames[i] = ExtractSleepTile(sleepSheet, _sleepCoords[i], bg0, scratch);
                 }
             }
         }
-
-        RebuildScaledFrames();
     }
 
-    private static Bitmap[] ScaleTileArray(Bitmap[] rawTiles, int targetSize)
+    private static bool IsBgColor(int c, int bg0, int bgCorner)
     {
-        if (rawTiles == null) return null;
-        Bitmap[] scaledArr = new Bitmap[rawTiles.Length];
-        for (int i = 0; i < rawTiles.Length; i++)
-        {
-            Bitmap scaled = new Bitmap(targetSize, targetSize, PixelFormat.Format32bppPArgb);
-            using (Graphics g = Graphics.FromImage(scaled))
-            {
-                g.Clear(Color.Transparent);
-                g.InterpolationMode = InterpolationMode.NearestNeighbor;
-                g.PixelOffsetMode = PixelOffsetMode.Half;
-                g.SmoothingMode = SmoothingMode.None;
-                g.DrawImage(rawTiles[i], new Rectangle(0, 0, targetSize, targetSize));
-            }
-            scaledArr[i] = scaled;
-        }
-        return scaledArr;
-    }
-
-    private void RebuildScaledFrames()
-    {
-        int targetSize = TILE_SIZE * _scale;
-        foreach (FormDef form in _forms)
-        {
-            if (form.RawFrames64 == null) continue;
-            if (form.ScaledFrames != null)
-            {
-                foreach (Bitmap old in form.ScaledFrames) if (old != null) old.Dispose();
-            }
-            if (form.ScaledGuardFrames != null)
-            {
-                foreach (Bitmap old in form.ScaledGuardFrames) if (old != null) old.Dispose();
-            }
-            if (form.ScaledJumpFrames != null)
-            {
-                foreach (Bitmap old in form.ScaledJumpFrames) if (old != null) old.Dispose();
-            }
-            if (form.ScaledStandFrames != null)
-            {
-                foreach (Bitmap old in form.ScaledStandFrames) if (old != null) old.Dispose();
-            }
-            form.ScaledFrames = ScaleTileArray(form.RawFrames64, targetSize);
-            form.ScaledGuardFrames = ScaleTileArray(form.RawGuardFrames64, targetSize);
-            form.ScaledJumpFrames = ScaleTileArray(form.RawJumpFrames64, targetSize);
-            form.ScaledStandFrames = ScaleTileArray(form.RawStandFrames64, targetSize);
-        }
-
-        if (_rawSleepFrames64 != null)
-        {
-            if (_scaledSleepFrames != null)
-            {
-                foreach (Bitmap old in _scaledSleepFrames) if (old != null) old.Dispose();
-            }
-            _scaledSleepFrames = ScaleTileArray(_rawSleepFrames64, targetSize);
-        }
-
-        _lastRenderedBitmap = null;
-    }
-
-    private static bool IsBgColor(Color c, Color bg0, Color bgCorner)
-    {
-        if (c.A == 0) return true;
-        if (c.R == bg0.R && c.G == bg0.G && c.B == bg0.B) return true;
-        if (c.R == bgCorner.R && c.G == bgCorner.G && c.B == bgCorner.B) return true;
-        if (c.R == 112 && c.G == 154 && c.B == 209) return true;
-        if (c.R == 150 && c.G == 150 && c.B == 255) return true;
+        if (((c >> 24) & 0xFF) == 0) return true;
+        int rgb = c & 0x00FFFFFF;
+        if (rgb == (bg0 & 0x00FFFFFF)) return true;
+        if (rgb == (bgCorner & 0x00FFFFFF)) return true;
+        if (rgb == 0x00709AD1) return true; // (112, 154, 209)
+        if (rgb == 0x009696FF) return true; // (150, 150, 255)
         return false;
     }
 
@@ -985,7 +1209,20 @@ public class KirbyTaskbarBuddy : ApplicationContext
         _scale2xItem.Checked = (_scale == 2);
         _scale3xItem.Checked = (_scale == 3);
         _scale4xItem.Checked = (_scale == 4);
-        RebuildScaledFrames();
+        _lastRenderedTile = null;
+        TrimMemory();
+    }
+
+    private static void TrimMemory()
+    {
+        try
+        {
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, true);
+            GC.WaitForPendingFinalizers();
+            GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, true);
+            SetProcessWorkingSetSize(Process.GetCurrentProcess().Handle, new IntPtr(-1), new IntPtr(-1));
+        }
+        catch { }
     }
 
     private void SetSleepTimeout(double seconds)
@@ -1057,18 +1294,26 @@ public class KirbyTaskbarBuddy : ApplicationContext
         {
             NotifyUserActivity();
         }
-        else if (_idleSleepSeconds > 0 && _sleepState == SleepState.Awake && !_isJumping && _scaledSleepFrames != null && _scaledSleepFrames.Length >= 8)
+        else if (_idleSleepSeconds > 0 && _sleepState == SleepState.Awake && !_isJumping && _sleepFrames != null && _sleepFrames.Length >= 8)
         {
             double idleSeconds = (nowMs - _lastInputMs) / 1000.0;
             if (idleSeconds >= _idleSleepSeconds)
             {
-                bool hasStandFrames = (_currentForm != null && _currentForm.ScaledStandFrames != null && _currentForm.ScaledStandFrames.Length >= 2);
+                bool hasStandFrames = (_currentForm != null && _currentForm.StandFrames != null && _currentForm.StandFrames.Length >= 2);
                 _sleepState = hasStandFrames ? SleepState.Halting : SleepState.FallingAsleep;
                 _sleepAnimTime = 0.0;
             }
         }
 
-        if (!_overlayEnabled || IsFullscreenAppActive())
+        _envCheckCounter++;
+        if (_envCheckCounter >= 15)
+        {
+            _envCheckCounter = 0;
+            _cachedWorkArea = Screen.PrimaryScreen.WorkingArea;
+            _isFullscreenCached = IsFullscreenAppActive(_cachedWorkArea);
+        }
+
+        if (!_overlayEnabled || _isFullscreenCached)
         {
             if (_overlay.Visible) _overlay.Hide();
             return;
@@ -1076,28 +1321,27 @@ public class KirbyTaskbarBuddy : ApplicationContext
 
         if (!_overlay.Visible) _overlay.Show();
 
-        Rectangle workArea = Screen.PrimaryScreen.WorkingArea;
-        int spriteSize = TILE_SIZE * _scale;
+        Rectangle workArea = _cachedWorkArea;
         int halfWidth = (TILE_SIZE / 2) * _scale;
         double delta60 = dtSeconds * 60.0;
 
-        Bitmap frameToRender = null;
+        SpriteTile frameToRender = null;
 
-        if (_sleepState != SleepState.Awake && _scaledSleepFrames != null && _scaledSleepFrames.Length >= 8)
+        if (_sleepState != SleepState.Awake && _sleepFrames != null && _sleepFrames.Length >= 8)
         {
             if (_sleepState == SleepState.Halting)
             {
                 _sleepAnimTime += 0.05 * delta60;
                 int seqIdx = (int)Math.Floor(_sleepAnimTime);
-                if (seqIdx >= _haltStandSeq.Length || _currentForm == null || _currentForm.ScaledStandFrames == null || _currentForm.ScaledStandFrames.Length < 2)
+                if (seqIdx >= _haltStandSeq.Length || _currentForm == null || _currentForm.StandFrames == null || _currentForm.StandFrames.Length < 2)
                 {
                     _sleepState = SleepState.FallingAsleep;
                     _sleepAnimTime = 0.0;
-                    frameToRender = _scaledSleepFrames[_fallAsleepSeq[0]];
+                    frameToRender = _sleepFrames[_fallAsleepSeq[0]];
                 }
                 else
                 {
-                    frameToRender = _currentForm.ScaledStandFrames[_haltStandSeq[seqIdx]];
+                    frameToRender = _currentForm.StandFrames[_haltStandSeq[seqIdx]];
                 }
             }
             else if (_sleepState == SleepState.FallingAsleep)
@@ -1108,11 +1352,11 @@ public class KirbyTaskbarBuddy : ApplicationContext
                 {
                     _sleepState = SleepState.Sleeping;
                     _sleepAnimTime = 0.0;
-                    frameToRender = _scaledSleepFrames[_sleepLoopSeq[0]];
+                    frameToRender = _sleepFrames[_sleepLoopSeq[0]];
                 }
                 else
                 {
-                    frameToRender = _scaledSleepFrames[_fallAsleepSeq[seqIdx]];
+                    frameToRender = _sleepFrames[_fallAsleepSeq[seqIdx]];
                 }
             }
             else if (_sleepState == SleepState.Sleeping)
@@ -1120,7 +1364,7 @@ public class KirbyTaskbarBuddy : ApplicationContext
                 _sleepAnimTime += 0.045 * delta60;
                 int seqIdx = ((int)Math.Floor(_sleepAnimTime)) % _sleepLoopSeq.Length;
                 if (seqIdx < 0) seqIdx += _sleepLoopSeq.Length;
-                frameToRender = _scaledSleepFrames[_sleepLoopSeq[seqIdx]];
+                frameToRender = _sleepFrames[_sleepLoopSeq[seqIdx]];
             }
             else if (_sleepState == SleepState.WakingUp)
             {
@@ -1128,11 +1372,11 @@ public class KirbyTaskbarBuddy : ApplicationContext
                 int seqIdx = (int)Math.Floor(_sleepAnimTime);
                 if (seqIdx >= _wakeUpSeq.Length)
                 {
-                    if (_currentForm != null && _currentForm.ScaledStandFrames != null && _currentForm.ScaledStandFrames.Length >= 2)
+                    if (_currentForm != null && _currentForm.StandFrames != null && _currentForm.StandFrames.Length >= 2)
                     {
                         _sleepState = SleepState.PostWakeStanding;
                         _sleepAnimTime = 0.0;
-                        frameToRender = _currentForm.ScaledStandFrames[_postWakeStandSeq[0]];
+                        frameToRender = _currentForm.StandFrames[_postWakeStandSeq[0]];
                     }
                     else
                     {
@@ -1142,21 +1386,21 @@ public class KirbyTaskbarBuddy : ApplicationContext
                 }
                 else
                 {
-                    frameToRender = _scaledSleepFrames[_wakeUpSeq[seqIdx]];
+                    frameToRender = _sleepFrames[_wakeUpSeq[seqIdx]];
                 }
             }
             else if (_sleepState == SleepState.PostWakeStanding)
             {
                 _sleepAnimTime += 0.06 * delta60;
                 int seqIdx = (int)Math.Floor(_sleepAnimTime);
-                if (seqIdx >= _postWakeStandSeq.Length || _currentForm == null || _currentForm.ScaledStandFrames == null || _currentForm.ScaledStandFrames.Length < 2)
+                if (seqIdx >= _postWakeStandSeq.Length || _currentForm == null || _currentForm.StandFrames == null || _currentForm.StandFrames.Length < 2)
                 {
                     _sleepState = SleepState.Awake;
                     _sleepAnimTime = 0.0;
                 }
                 else
                 {
-                    frameToRender = _currentForm.ScaledStandFrames[_postWakeStandSeq[seqIdx]];
+                    frameToRender = _currentForm.StandFrames[_postWakeStandSeq[seqIdx]];
                 }
             }
         }
@@ -1197,11 +1441,11 @@ public class KirbyTaskbarBuddy : ApplicationContext
                 _kirbyX = workArea.Left - halfWidth;
             }
 
-            if (_currentForm == null || _currentForm.ScaledFrames == null) return;
+            if (_currentForm == null || _currentForm.Frames == null) return;
 
-            bool useJump = _isJumping && _currentForm.ScaledJumpFrames != null && _currentForm.ScaledJumpFrames.Length >= 5;
-            bool useGuard = !useJump && isMouseNear && _currentForm.ScaledGuardFrames != null && _currentForm.ScaledGuardFrames.Length > 0;
-            Bitmap[] activeFrames = useJump ? _currentForm.ScaledJumpFrames : (useGuard ? _currentForm.ScaledGuardFrames : _currentForm.ScaledFrames);
+            bool useJump = _isJumping && _currentForm.JumpFrames != null && _currentForm.JumpFrames.Length >= 5;
+            bool useGuard = !useJump && isMouseNear && _currentForm.GuardFrames != null && _currentForm.GuardFrames.Length > 0;
+            SpriteTile[] activeFrames = useJump ? _currentForm.JumpFrames : (useGuard ? _currentForm.GuardFrames : _currentForm.Frames);
 
             int frameIdx;
             if (useJump)
@@ -1234,25 +1478,25 @@ public class KirbyTaskbarBuddy : ApplicationContext
             SetWindowPos(_overlay.Handle, new IntPtr(-1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010);
         }
 
-        if (screenX != _lastRenderedX || screenY != _lastRenderedY || frameToRender != _lastRenderedBitmap)
+        if (screenX != _lastRenderedX || screenY != _lastRenderedY || frameToRender != _lastRenderedTile)
         {
-            _overlay.UpdateSpriteFrame(frameToRender, screenX, screenY);
+            _overlay.UpdateSpriteFrame(frameToRender, _scale, screenX, screenY);
             _lastRenderedX = screenX;
             _lastRenderedY = screenY;
-            _lastRenderedBitmap = frameToRender;
+            _lastRenderedTile = frameToRender;
         }
     }
 
-    private bool IsFullscreenAppActive()
+    private bool IsFullscreenAppActive(Rectangle work)
     {
         try
         {
             IntPtr fg = GetForegroundWindow();
             if (fg == IntPtr.Zero || fg == _overlay.Handle) return false;
 
-            StringBuilder sb = new StringBuilder(64);
-            GetClassName(fg, sb, sb.Capacity);
-            string cls = sb.ToString();
+            _classNameSb.Length = 0;
+            GetClassName(fg, _classNameSb, _classNameSb.Capacity);
+            string cls = _classNameSb.ToString();
             if (cls == "Progman" || cls == "WorkerW" || cls == "Shell_TrayWnd" || cls == "Shell_SecondaryTrayWnd")
                 return false;
 
@@ -1260,7 +1504,6 @@ public class KirbyTaskbarBuddy : ApplicationContext
             if (GetWindowRect(fg, out rect))
             {
                 Rectangle screen = Screen.PrimaryScreen.Bounds;
-                Rectangle work = Screen.PrimaryScreen.WorkingArea;
                 if (rect.Left <= screen.Left && rect.Top <= screen.Top &&
                     rect.Right >= screen.Right && rect.Bottom >= screen.Bottom &&
                     rect.Bottom > work.Bottom)
@@ -1275,6 +1518,7 @@ public class KirbyTaskbarBuddy : ApplicationContext
 
     private void HandleKeySwitch(string keyName)
     {
+        if (keyName == null) return;
         if (keyName == " ")
         {
             if (!_isJumping)
@@ -1300,32 +1544,7 @@ public class KirbyTaskbarBuddy : ApplicationContext
 
     private Icon LoadKirbyTrayIcon()
     {
-        try
-        {
-            using (Bitmap sheet = OpenSpriteBitmap("kirby-normal.png"))
-            {
-                if (sheet != null)
-                {
-                    using (Bitmap crop = new Bitmap(24, 24))
-                    {
-                        Color bg = sheet.GetPixel(0, 0);
-                        for (int y = 0; y < 24; y++)
-                        {
-                            for (int x = 0; x < 24; x++)
-                            {
-                                Color c = sheet.GetPixel(32 + x, 125 + y);
-                                if (c.R == bg.R && c.G == bg.G && c.B == bg.B)
-                                    crop.SetPixel(x, y, Color.Transparent);
-                                else
-                                    crop.SetPixel(x, y, c);
-                            }
-                        }
-                        return Icon.FromHandle(crop.GetHicon());
-                    }
-                }
-            }
-        }
-        catch { }
+        if (_loadedTrayIcon != null) return _loadedTrayIcon;
         return SystemIcons.Application;
     }
 
@@ -1396,6 +1615,11 @@ public class KirbyTaskbarBuddy : ApplicationContext
             _hookID = IntPtr.Zero;
         }
         _trayIcon.Visible = false;
+        if (_trayIconHandle != IntPtr.Zero)
+        {
+            DestroyIcon(_trayIconHandle);
+            _trayIconHandle = IntPtr.Zero;
+        }
         Application.Exit();
     }
 
@@ -1413,7 +1637,7 @@ public class KirbyTaskbarBuddy : ApplicationContext
                 if (_downKeys.Add(vkCode) && !_instance._isPaused && !wasSleeping)
                 {
                     string keyName = VkCodeToName(vkCode);
-                    _instance.HandleKeySwitch(keyName);
+                    if (keyName != null) _instance.HandleKeySwitch(keyName);
                 }
             }
             else if (msg == WM_KEYUP || msg == WM_SYSKEYUP)
@@ -1426,21 +1650,31 @@ public class KirbyTaskbarBuddy : ApplicationContext
 
     private static string VkCodeToName(int vk)
     {
-        if (vk >= 0x41 && vk <= 0x5A) return ((char)vk).ToString().ToLowerInvariant();
-        if (vk >= 0x30 && vk <= 0x39) return ((char)vk).ToString();
-        if (vk >= 0x60 && vk <= 0x69) return (vk - 0x60).ToString();
         switch (vk)
         {
+            case 0x30:
+            case 0x60: return "0";
+            case 0x41: return "a";
+            case 0x42: return "b";
+            case 0x43: return "c";
+            case 0x44: return "d";
+            case 0x45: return "e";
+            case 0x46: return "f";
+            case 0x47: return "g";
+            case 0x48: return "h";
+            case 0x4A: return "j";
+            case 0x4C: return "l";
+            case 0x4D: return "m";
+            case 0x4E: return "n";
+            case 0x50: return "p";
+            case 0x52: return "r";
+            case 0x53: return "s";
+            case 0x55: return "u";
+            case 0x56: return "v";
+            case 0x57: return "w";
+            case 0x59: return "y";
             case 0x20: return " ";
-            case 0x0D: return "enter";
-            case 0x08: return "backspace";
-            case 0x09: return "tab";
-            case 0x1B: return "escape";
-            case 0x25: return "arrowleft";
-            case 0x26: return "arrowup";
-            case 0x27: return "arrowright";
-            case 0x28: return "arrowdown";
-            default:   return "vk_" + vk;
+            default:   return null;
         }
     }
 
@@ -1472,6 +1706,9 @@ public class KirbyTaskbarBuddy : ApplicationContext
     [DllImport("user32.dll", SetLastError = true)]
     private static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
 
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern bool DestroyIcon(IntPtr hIcon);
+
     [DllImport("user32.dll", CharSet = CharSet.Auto, SetLastError = true)]
     private static extern IntPtr SetWindowsHookEx(int idHook, LowLevelKeyboardProc lpfn, IntPtr hMod, uint dwThreadId);
 
@@ -1484,4 +1721,7 @@ public class KirbyTaskbarBuddy : ApplicationContext
 
     [DllImport("kernel32.dll", CharSet = CharSet.Auto, SetLastError = true)]
     private static extern IntPtr GetModuleHandle(string lpModuleName);
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool SetProcessWorkingSetSize(IntPtr hProcess, IntPtr dwMinimumWorkingSetSize, IntPtr dwMaximumWorkingSetSize);
 }

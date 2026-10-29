@@ -1,0 +1,30 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <FrameworkPathOverride>C:\Windows\Microsoft.NET\Framework\v4.0.30319</FrameworkPathOverride>
+    <AutomaticallyUseReferenceAssemblyPackages>false</AutomaticallyUseReferenceAssemblyPackages>
+    <PlatformTarget>x86</PlatformTarget>
+    <RootNamespace>KirbyTaskbarBuddy</RootNamespace>
+    <AssemblyName>KirbyTaskbarBuddy</AssemblyName>
+    <ApplicationIcon>sprites\kirby.ico</ApplicationIcon>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <EnableDefaultEmbeddedResourceItems>false</EnableDefaultEmbeddedResourceItems>
+    <GenerateAssemblyInfo>false</GenerateAssemblyInfo>
+    <Optimize>true</Optimize>
+    <LangVersion>5</LangVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Reference Include="System" />
+    <Reference Include="System.Drawing" />
+    <Reference Include="System.Windows.Forms" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Include="src\**\*.cs" />
+    <EmbeddedResource Include="sprites\kirby-*.png" LogicalName="%(Filename)%(Extension)" />
+  </ItemGroup>
+
+</Project>

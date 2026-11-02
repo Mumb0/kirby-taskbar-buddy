@@ -449,7 +449,7 @@ namespace KirbyTaskbarBuddy {
         }
 
         /// <summary>
-        /// Checks whether the mouse pointer is within guard trigger range of Kirby's body on the taskbar
+        /// Checks whether the mouse pointer is touching Kirby's 24x24 sprite body on the taskbar
         /// (Kirby only guards when on the ground, never mid-jump).
         /// </summary>
         internal static bool IsMouseNearKirby(Point mouse, double kirbyX, int workAreaBottom, int scale, bool isJumping) {
@@ -457,10 +457,10 @@ namespace KirbyTaskbarBuddy {
                 return false;
             }
 
-            double kirbyCenterY = workAreaBottom - 16 * scale;
+            double kirbyCenterY = workAreaBottom - 12 * scale;
             double distX = Math.Abs(mouse.X - kirbyX);
             double distY = Math.Abs(mouse.Y - kirbyCenterY);
-            return distX <= 24 * scale && distY <= 28 * scale;
+            return distX <= 12 * scale && distY <= 12 * scale;
         }
 
         /// <summary>

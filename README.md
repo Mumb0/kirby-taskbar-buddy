@@ -86,7 +86,7 @@ Press any of the following keys anywhere on your system to transform Kirby:
 Right-click the Kirby icon in your Windows system tray (near the clock) to access settings:
 
 - **Show Foreground Taskbar Kirby:** Toggle Kirby's visibility on or off.
-- **Kirby Size:** Switch between **2x (Default)**, **3x (Large)**, and **4x (Extra Large)**
+- **Kirby Size:** Switch between **1x (Small)**, **2x (Default)**, **3x (Large)**, and **4x (Extra Large)**
   pixel-perfect scaling.
 - **Sleep Timer:** Choose how long Kirby waits before falling asleep (**10 Seconds**, **30 Seconds**,
   **1 Minute**, **3 Minutes**, **5 Minutes (Default)**, **10 Minutes**, or **Never**).

@@ -20,7 +20,8 @@ namespace KirbyTaskbarBuddy
         private const string APP_NAME = "KirbyTaskbarBuddy";
         private const string LEGACY_APP_NAME = "KirbyWallpaperKeyBridge";
 
-        // Jump physics constants (calibrated in unscaled 1x pixels per 60Hz tick)
+        // Movement and jump physics constants (calibrated in unscaled 1x pixels per 60Hz tick)
+        internal const double WALK_SPEED = 0.75;
         internal const double JUMP_INIT_VEL = 4.2;
         internal const double JUMP_GRAVITY = 0.18;
 
@@ -41,6 +42,7 @@ namespace KirbyTaskbarBuddy
         private MenuItem _overlayItem;
         private MenuItem _pauseItem;
         private MenuItem _startupItem;
+        private MenuItem _scale1xItem;
         private MenuItem _scale2xItem;
         private MenuItem _scale3xItem;
         private MenuItem _scale4xItem;
@@ -94,10 +96,11 @@ namespace KirbyTaskbarBuddy
             if (IsStartupEnabled()) SetStartup(true);
             _startupItem = new MenuItem("Start with Windows", OnToggleStartup) { Checked = IsStartupEnabled() };
 
+            _scale1xItem = new MenuItem("1x (Small)", (s, e) => SetScale(1)) { Checked = (_scale == 1) };
             _scale2xItem = new MenuItem("2x (Default)", (s, e) => SetScale(2)) { Checked = (_scale == 2) };
             _scale3xItem = new MenuItem("3x (Large)", (s, e) => SetScale(3)) { Checked = (_scale == 3) };
             _scale4xItem = new MenuItem("4x (Extra Large)", (s, e) => SetScale(4)) { Checked = (_scale == 4) };
-            MenuItem scaleMenu = new MenuItem("Kirby Size", new MenuItem[] { _scale2xItem, _scale3xItem, _scale4xItem });
+            MenuItem scaleMenu = new MenuItem("Kirby Size", new MenuItem[] { _scale1xItem, _scale2xItem, _scale3xItem, _scale4xItem });
 
             string[] sleepLabels = new string[]
             {
@@ -181,6 +184,7 @@ namespace KirbyTaskbarBuddy
         {
             if (_scale == newScale) return;
             _scale = newScale;
+            _scale1xItem.Checked = (_scale == 1);
             _scale2xItem.Checked = (_scale == 2);
             _scale3xItem.Checked = (_scale == 3);
             _scale4xItem.Checked = (_scale == 4);
@@ -341,11 +345,11 @@ namespace KirbyTaskbarBuddy
 
         /// <summary>
         /// Advances Kirby's horizontal and vertical jump trajectory by <paramref name="delta60"/> ticks
-        /// and lands cleanly at <c>jumpY = 0</c> when touching the ground.
+        /// (scaling horizontal travel by <paramref name="scale"/>) and lands cleanly at <c>jumpY = 0</c> when touching the ground.
         /// </summary>
-        internal static void StepJumpPhysics(ref bool isJumping, ref double kirbyX, ref double jumpY, ref double jumpVelY, double delta60)
+        internal static void StepJumpPhysics(ref bool isJumping, ref double kirbyX, ref double jumpY, ref double jumpVelY, double delta60, int scale = 2)
         {
-            kirbyX += 1.5 * delta60;
+            kirbyX += (WALK_SPEED * scale) * delta60;
             jumpY += jumpVelY * delta60;
             jumpVelY -= JUMP_GRAVITY * delta60;
             if (jumpY <= 0.0)
@@ -448,11 +452,11 @@ namespace KirbyTaskbarBuddy
 
                 if (_isJumping)
                 {
-                    StepJumpPhysics(ref _isJumping, ref _kirbyX, ref _jumpY, ref _jumpVelY, delta60);
+                    StepJumpPhysics(ref _isJumping, ref _kirbyX, ref _jumpY, ref _jumpVelY, delta60, _scale);
                 }
                 else if (!isMouseNear)
                 {
-                    _kirbyX += 1.5 * delta60;
+                    _kirbyX += (WALK_SPEED * _scale) * delta60;
                     _animTime += activeClip.Speed * delta60;
                 }
                 else

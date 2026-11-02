@@ -79,7 +79,7 @@ namespace KirbyTaskbarBuddy
         }
 
         /// <summary>
-        /// Lazily allocates (or resizes when the user switches between 2x/3x/4x scale) a single
+        /// Lazily allocates (or resizes when the user switches between 1x/2x/3x/4x scale) a single
         /// 32-bpp top-down GDI DIBSection whose raw pixel pointer (<see cref="_dibBits"/>) can be written directly.
         /// </summary>
         private void EnsureDib(int targetSize)

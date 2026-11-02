@@ -133,7 +133,19 @@ namespace KirbyTaskbarBuddy.Tests
             Assert.Equal(0.0, jumpY);
             Assert.Equal(0.0, jumpVelY);
             Assert.True(maxJumpY > 45.0, "Jump apex should exceed 45 unscaled pixels");
-            Assert.Equal(100.0 + 1.5 * ticks, kirbyX, 5);
+            Assert.Equal(100.0 + (KirbyTaskbarBuddyContext.WALK_SPEED * 2) * ticks, kirbyX, 5);
+
+            // At 1x scale, Kirby travels half the horizontal screen distance per tick as at 2x scale.
+            bool isJumping1x = true;
+            double kirbyX1x = 100.0;
+            double jumpY1x = 0.0;
+            double jumpVelY1x = KirbyTaskbarBuddyContext.JUMP_INIT_VEL;
+            for (int i = 0; i < ticks; i++)
+            {
+                KirbyTaskbarBuddyContext.StepJumpPhysics(ref isJumping1x, ref kirbyX1x, ref jumpY1x, ref jumpVelY1x, 1.0, scale: 1);
+            }
+            Assert.False(isJumping1x);
+            Assert.Equal(100.0 + (KirbyTaskbarBuddyContext.WALK_SPEED * 1) * ticks, kirbyX1x, 5);
         }
 
         [Fact]
@@ -165,6 +177,11 @@ namespace KirbyTaskbarBuddy.Tests
             Assert.True(KirbyTaskbarBuddyContext.IsMouseNearKirby(nearPoint, kirbyX, workAreaBottom, scale, isJumping: false));
             Assert.False(KirbyTaskbarBuddyContext.IsMouseNearKirby(outsideX, kirbyX, workAreaBottom, scale, isJumping: false));
             Assert.False(KirbyTaskbarBuddyContext.IsMouseNearKirby(outsideY, kirbyX, workAreaBottom, scale, isJumping: false));
+
+            // At scale=1, kirbyCenterY = 1040 - 16 = 1024; guard box is +/-24px horizontally and +/-28px vertically.
+            Assert.True(KirbyTaskbarBuddyContext.IsMouseNearKirby(new Point(524, 996), kirbyX, workAreaBottom, scale: 1, isJumping: false));
+            Assert.False(KirbyTaskbarBuddyContext.IsMouseNearKirby(new Point(525, 1024), kirbyX, workAreaBottom, scale: 1, isJumping: false));
+            Assert.False(KirbyTaskbarBuddyContext.IsMouseNearKirby(new Point(500, 995), kirbyX, workAreaBottom, scale: 1, isJumping: false));
 
             // Never enters guard stance while jumping, even if cursor is directly over Kirby.
             Assert.False(KirbyTaskbarBuddyContext.IsMouseNearKirby(new Point(500, 1008), kirbyX, workAreaBottom, scale, isJumping: true));

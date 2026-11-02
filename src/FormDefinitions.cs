@@ -375,6 +375,14 @@ namespace KirbyTaskbarBuddy
                 WalkSpeed = 0.55,
                 Walk = EnemyWalkClip(R(5, 57, 24, 24), R(33, 57, 22, 24))
             });
+
+            enemies.Add(new EnemyDef
+            {
+                Name = "waddle-doo",
+                FileName = "enemy-waddle-dee.png",
+                WalkSpeed = 0.55,
+                Walk = EnemyWalkClip(R(5, 84, 24, 24), R(32, 84, 23, 24))
+            });
         }
 
         private static void AddForm(

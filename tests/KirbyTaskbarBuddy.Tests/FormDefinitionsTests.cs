@@ -90,18 +90,22 @@ namespace KirbyTaskbarBuddy.Tests
         }
 
         [Fact]
-        public void PopulateEnemies_RegistersWaddleDeeWithValidWalkClipAndSpeed()
+        public void PopulateEnemies_RegistersWaddleDeeAndWaddleDooWithValidWalkClipsAndSpeeds()
         {
             List<EnemyDef> enemies = new List<EnemyDef>();
             FormDefinitions.PopulateEnemies(enemies);
 
-            Assert.Single(enemies);
-            EnemyDef waddleDee = enemies[0];
-            Assert.Equal("waddle-dee", waddleDee.Name);
-            Assert.Equal("enemy-waddle-dee.png", waddleDee.FileName);
-            Assert.True(waddleDee.WalkSpeed > 0.0 && waddleDee.WalkSpeed < KirbyTaskbarBuddyContext.WALK_SPEED);
-            AssertClipDefinitionValid(waddleDee.Name, "Walk", waddleDee.Walk, minRects: 2);
-            Assert.Equal(2, waddleDee.Walk.SourceRects.Length);
+            Assert.Equal(2, enemies.Count);
+            Assert.Equal("waddle-dee", enemies[0].Name);
+            Assert.Equal("waddle-doo", enemies[1].Name);
+
+            foreach (EnemyDef enemy in enemies)
+            {
+                Assert.Equal("enemy-waddle-dee.png", enemy.FileName);
+                Assert.True(enemy.WalkSpeed > 0.0 && enemy.WalkSpeed < KirbyTaskbarBuddyContext.WALK_SPEED);
+                AssertClipDefinitionValid(enemy.Name, "Walk", enemy.Walk, minRects: 2);
+                Assert.Equal(2, enemy.Walk.SourceRects.Length);
+            }
         }
 
         [Fact]

@@ -123,15 +123,6 @@ namespace KirbyTaskbarBuddy.Tests
         {
             using (Bitmap bmp = new Bitmap(32, 32, PixelFormat.Format32bppArgb))
             {
-                Color bg = Color.FromArgb(255, 0, 128, 0);
-                for (int y = 0; y < 32; y++)
-                {
-                    for (int x = 0; x < 32; x++)
-                    {
-                        bmp.SetPixel(x, y, bg);
-                    }
-                }
-
                 // Wide asymmetrical hat/weapon near the top: X = 2..28 at Y = 5
                 for (int x = 2; x <= 28; x++)
                 {
@@ -146,7 +137,6 @@ namespace KirbyTaskbarBuddy.Tests
 
                 using (FastSheet sheet = new FastSheet(null, bmp, 32, 32))
                 {
-                    int bg0 = sheet.GetPixel(0, 0);
                     int[] scratch = new int[NativeMethods.TILE_SIZE * NativeMethods.TILE_SIZE];
                     AnimClip clip = FormDefinitions.Clip(
                         new Rectangle[] { new Rectangle(0, 0, 32, 32) },
@@ -154,7 +144,7 @@ namespace KirbyTaskbarBuddy.Tests
                         false,
                         PivotMode.FeetBottom4Rows);
 
-                    SpriteLoader.LoadClip(sheet, clip, bg0, scratch);
+                    SpriteLoader.LoadClip(sheet, clip, scratch);
 
                     SpriteTile tile = clip.Frames[0];
                     // Feet at Y=20 must land on PIVOT_Y (54), so top of hat (Y=5) lands at 54 - (20 - 5) = 39.
@@ -184,7 +174,6 @@ namespace KirbyTaskbarBuddy.Tests
 
                 using (FastSheet sheet = new FastSheet(null, bmp, 20, 20))
                 {
-                    int bg0 = sheet.GetPixel(0, 0);
                     int[] scratch = new int[NativeMethods.TILE_SIZE * NativeMethods.TILE_SIZE];
 
                     // 1. PivotMode.Center places bounding-box center (4, 6) at (PIVOT_X=40, PIVOT_Y=54) -> MinX=38, MinY=52.
@@ -193,7 +182,7 @@ namespace KirbyTaskbarBuddy.Tests
                         0.1,
                         false,
                         PivotMode.Center);
-                    SpriteLoader.LoadClip(sheet, centerClip, bg0, scratch);
+                    SpriteLoader.LoadClip(sheet, centerClip, scratch);
                     Assert.Equal(NativeMethods.PIVOT_X - 2, centerClip.Frames[0].MinX);
                     Assert.Equal(NativeMethods.PIVOT_Y - 2, centerClip.Frames[0].MinY);
                     Assert.Equal(5, centerClip.Frames[0].Width);
@@ -208,7 +197,7 @@ namespace KirbyTaskbarBuddy.Tests
                         null,
                         customPivotX: 2,
                         customPivotY: 4);
-                    SpriteLoader.LoadClip(sheet, customClip, bg0, scratch);
+                    SpriteLoader.LoadClip(sheet, customClip, scratch);
                     Assert.Equal(NativeMethods.PIVOT_X, customClip.Frames[0].MinX);
                     Assert.Equal(NativeMethods.PIVOT_Y, customClip.Frames[0].MinY);
                 }
@@ -216,17 +205,66 @@ namespace KirbyTaskbarBuddy.Tests
         }
 
         [Fact]
-        public void IsBgColor_DetectsTransparentAndSheetGridColors()
+        public void IsTransparent_And_IsRawSheetBgColor_DetectExpectedColors()
         {
             int bg0 = unchecked((int)0xFF112233);
             int bgCorner = unchecked((int)0xFF445566);
 
-            Assert.True(SpriteLoader.IsBgColor(0x00FFFFFF, bg0, bgCorner)); // Alpha = 0
-            Assert.True(SpriteLoader.IsBgColor(bg0, bg0, bgCorner));        // Sheet top-left color
-            Assert.True(SpriteLoader.IsBgColor(bgCorner, bg0, bgCorner));   // Sub-rect corner color
-            Assert.True(SpriteLoader.IsBgColor(unchecked((int)0xFF709AD1), bg0, bgCorner)); // Blue divider grid
-            Assert.True(SpriteLoader.IsBgColor(unchecked((int)0xFF9696FF), bg0, bgCorner)); // Lavender fill
-            Assert.False(SpriteLoader.IsBgColor(unchecked((int)0xFFFF80A0), bg0, bgCorner)); // Kirby pink
+            Assert.True(SpriteLoader.IsTransparent(0x00FFFFFF));
+            Assert.False(SpriteLoader.IsTransparent(unchecked((int)0xFFFF80A0)));
+
+            Assert.True(SpriteLoader.IsRawSheetBgColor(0x00FFFFFF, bg0, bgCorner)); // Alpha = 0
+            Assert.True(SpriteLoader.IsRawSheetBgColor(bg0, bg0, bgCorner));        // Sheet top-left color
+            Assert.True(SpriteLoader.IsRawSheetBgColor(bgCorner, bg0, bgCorner));   // Sub-rect corner color
+            Assert.True(SpriteLoader.IsRawSheetBgColor(unchecked((int)0xFF8080FF), bg0, bgCorner)); // Outer sheet periwinkle
+            Assert.True(SpriteLoader.IsRawSheetBgColor(unchecked((int)0xFF709AD1), bg0, bgCorner)); // Blue divider grid
+            Assert.True(SpriteLoader.IsRawSheetBgColor(unchecked((int)0xFF9696FF), bg0, bgCorner)); // Lavender fill
+            Assert.False(SpriteLoader.IsRawSheetBgColor(unchecked((int)0xFFFF80A0), bg0, bgCorner)); // Kirby pink
+        }
+
+        [Fact]
+        public void StripSingleSpritesheet_StripsOpaqueBackgroundAndGrid_AndIsIdempotent()
+        {
+            string tempFile = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "kirby_test_sheet_" + Guid.NewGuid().ToString("N") + ".png");
+            try
+            {
+                using (Bitmap raw = new Bitmap(8, 8, PixelFormat.Format32bppArgb))
+                {
+                    for (int y = 0; y < 8; y++)
+                    {
+                        for (int x = 0; x < 8; x++)
+                        {
+                            raw.SetPixel(x, y, Color.FromArgb(255, 128, 128, 255)); // 0x8080FF outer bg
+                        }
+                    }
+                    raw.SetPixel(1, 1, Color.FromArgb(255, 112, 154, 209)); // 0x709AD1 grid line
+                    raw.SetPixel(2, 2, Color.FromArgb(255, 150, 150, 255)); // 0x9696FF inner box fill
+                    raw.SetPixel(4, 4, Color.FromArgb(255, 255, 128, 160)); // Kirby pink pixel
+                    raw.Save(tempFile, ImageFormat.Png);
+                }
+
+                // First pass strips the background and grid colors and returns true.
+                Assert.True(SpriteLoader.StripSingleSpritesheet(tempFile));
+
+                using (Bitmap cleaned = new Bitmap(tempFile))
+                {
+                    Assert.Equal(0, cleaned.GetPixel(0, 0).A);
+                    Assert.Equal(0, cleaned.GetPixel(1, 1).A);
+                    Assert.Equal(0, cleaned.GetPixel(2, 2).A);
+                    Color kirbyPixel = cleaned.GetPixel(4, 4);
+                    Assert.Equal(255, kirbyPixel.A);
+                    Assert.Equal(255, kirbyPixel.R);
+                    Assert.Equal(128, kirbyPixel.G);
+                    Assert.Equal(160, kirbyPixel.B);
+                }
+
+                // Second pass on an already-cleaned sheet is a no-op and returns false.
+                Assert.False(SpriteLoader.StripSingleSpritesheet(tempFile));
+            }
+            finally
+            {
+                if (System.IO.File.Exists(tempFile)) System.IO.File.Delete(tempFile);
+            }
         }
 
         [Fact]

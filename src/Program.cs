@@ -15,6 +15,13 @@ namespace KirbyTaskbarBuddy
         [STAThread]
         public static void Main(string[] args)
         {
+            if (args != null && args.Length > 0 && string.Equals(args[0], "--clean-sprites", StringComparison.OrdinalIgnoreCase))
+            {
+                string dir = (args.Length > 1) ? args[1] : "sprites";
+                SpriteLoader.StripSpritesheetBackgrounds(dir);
+                return;
+            }
+
             // Must be called before creating any HWND so Windows does not bitmap-stretch
             // the pixel-art overlay or return DPI-virtualized screen bounds.
             try { NativeMethods.SetProcessDPIAware(); } catch { }

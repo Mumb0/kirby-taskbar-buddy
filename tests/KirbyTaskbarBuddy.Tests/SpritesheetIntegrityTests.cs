@@ -55,6 +55,34 @@ namespace KirbyTaskbarBuddy.Tests
         }
 
         [Fact]
+        public void AllSpritesheets_HaveTransparentBackgrounds()
+        {
+            List<FormDef> forms = new List<FormDef>();
+            Dictionary<string, FormDef> keyToForm = new Dictionary<string, FormDef>();
+            FormDef normalForm;
+            FormDefinitions.PopulateForms(forms, keyToForm, out normalForm);
+
+            Assembly appAssembly = typeof(FormDefinitions).Assembly;
+
+            foreach (FormDef form in forms)
+            {
+                using (Stream stream = appAssembly.GetManifestResourceStream(form.FileName))
+                using (Bitmap bmp = new Bitmap(stream))
+                {
+                    Assert.True(
+                        bmp.GetPixel(0, 0).A == 0,
+                        string.Format("{0} top-left pixel (0,0) is not transparent; run clean-sprites.bat or SpriteLoader.StripSpritesheetBackgrounds", form.FileName));
+                }
+            }
+
+            using (Stream sleepStream = appAssembly.GetManifestResourceStream("kirby-sleep.png"))
+            using (Bitmap sleepBmp = new Bitmap(sleepStream))
+            {
+                Assert.Equal(0, sleepBmp.GetPixel(0, 0).A);
+            }
+        }
+
+        [Fact]
         public void LoadAllSpritesheets_ExtractsNonEmptyValidTilesForAllAbilitiesAndSleep()
         {
             List<FormDef> forms = new List<FormDef>();

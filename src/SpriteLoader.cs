@@ -74,7 +74,8 @@ namespace KirbyTaskbarBuddy
     }
 
     /// <summary>
-    /// Extracts, background-keys, floor-aligns, and composites Kirby sprite frames from embedded PNG spritesheets.
+    /// Extracts, floor-aligns, and composites Kirby sprite frames from transparent embedded PNG spritesheets,
+    /// and provides repeatable background-stripping utilities for newly imported spritesheets.
     /// </summary>
     public static class SpriteLoader
     {
@@ -106,17 +107,16 @@ namespace KirbyTaskbarBuddy
                 using (FastSheet rawSheet = OpenSpriteSheet(form.FileName, reqW, reqH))
                 {
                     if (rawSheet == null) continue;
-                    int bg0 = rawSheet.GetPixel(0, 0);
 
                     if (form.Name == "normal" && trayIcon == null)
                     {
-                        ExtractTrayIconFromNormalSheet(rawSheet, bg0, out trayIcon, out trayIconHandle);
+                        ExtractTrayIconFromNormalSheet(rawSheet, out trayIcon, out trayIconHandle);
                     }
 
-                    LoadClip(rawSheet, form.Walk, bg0, scratch, true);
-                    LoadClip(rawSheet, form.Guard, bg0, scratch, false);
-                    LoadClip(rawSheet, form.Jump, bg0, scratch, false);
-                    LoadClip(rawSheet, form.Stand, bg0, scratch, false);
+                    LoadClip(rawSheet, form.Walk, scratch);
+                    LoadClip(rawSheet, form.Guard, scratch);
+                    LoadClip(rawSheet, form.Jump, scratch);
+                    LoadClip(rawSheet, form.Stand, scratch);
                 }
             }
 
@@ -126,13 +126,11 @@ namespace KirbyTaskbarBuddy
             {
                 if (sleepSheet != null)
                 {
-                    int bg0 = sleepSheet.GetPixel(0, 0);
                     sleepFrames = new SpriteTile[FormDefinitions.SleepCoords.Length];
                     for (int i = 0; i < FormDefinitions.SleepCoords.Length; i++)
                     {
                         Rectangle sr = FormDefinitions.SleepCoords[i];
-                        int sCorner = sleepSheet.GetPixel(sr.X, sr.Y);
-                        sleepFrames[i] = ExtractCustomPivotTile(sleepSheet, sr, bg0, sCorner, 18, -1, scratch);
+                        sleepFrames[i] = ExtractCustomPivotTile(sleepSheet, sr, 18, -1, scratch);
                     }
                 }
             }
@@ -143,40 +141,38 @@ namespace KirbyTaskbarBuddy
         /// <see cref="AnimClip.Pivot"/>, and builds the playback <see cref="AnimClip.Frames"/> array (reusing tile
         /// references when an index <see cref="AnimClip.Sequence"/> such as a ping-pong loop is defined).
         /// </summary>
-        internal static void LoadClip(FastSheet rawSheet, AnimClip clip, int bg0, int[] scratch, bool useFirstRectCorner = false)
+        internal static void LoadClip(FastSheet rawSheet, AnimClip clip, int[] scratch)
         {
             if (rawSheet == null || clip == null || clip.SourceRects == null || clip.SourceRects.Length == 0) return;
 
             Rectangle[] rects = clip.SourceRects;
             if (clip.Pivot == PivotMode.JumpArc)
             {
-                clip.RawFrames = ExtractJumpTiles(rawSheet, rects, bg0, scratch);
+                clip.RawFrames = ExtractJumpTiles(rawSheet, rects, scratch);
             }
             else
             {
                 clip.RawFrames = new SpriteTile[rects.Length];
-                int firstCorner = rawSheet.GetPixel(rects[0].X, rects[0].Y);
                 for (int i = 0; i < rects.Length; i++)
                 {
                     Rectangle r = rects[i];
-                    int bgCorner = useFirstRectCorner ? firstCorner : rawSheet.GetPixel(r.X, r.Y);
                     switch (clip.Pivot)
                     {
                         case PivotMode.MirrorGuard:
-                            clip.RawFrames[i] = ExtractMirrorGuardTile(rawSheet, r, bg0, scratch);
+                            clip.RawFrames[i] = ExtractMirrorGuardTile(rawSheet, r, scratch);
                             break;
                         case PivotMode.GuardBottom2Rows:
-                            clip.RawFrames[i] = ExtractAlignedTile(rawSheet, r, bg0, bgCorner, scratch, true);
+                            clip.RawFrames[i] = ExtractAlignedTile(rawSheet, r, scratch, true);
                             break;
                         case PivotMode.Center:
-                            clip.RawFrames[i] = ExtractCenteredTile(rawSheet, r, bg0, bgCorner, scratch);
+                            clip.RawFrames[i] = ExtractCenteredTile(rawSheet, r, scratch);
                             break;
                         case PivotMode.CustomPivot:
-                            clip.RawFrames[i] = ExtractCustomPivotTile(rawSheet, r, bg0, bgCorner, clip.CustomPivotX, clip.CustomPivotY, scratch);
+                            clip.RawFrames[i] = ExtractCustomPivotTile(rawSheet, r, clip.CustomPivotX, clip.CustomPivotY, scratch);
                             break;
                         case PivotMode.FeetBottom4Rows:
                         default:
-                            clip.RawFrames[i] = ExtractAlignedTile(rawSheet, r, bg0, bgCorner, scratch, false);
+                            clip.RawFrames[i] = ExtractAlignedTile(rawSheet, r, scratch, false);
                             break;
                     }
                 }
@@ -248,19 +244,106 @@ namespace KirbyTaskbarBuddy
         }
 
         /// <summary>
-        /// Determines whether a spritesheet pixel belongs to the sheet's background / grid lines.
-        /// Checks alpha=0, the sheet's top-left pixel (<paramref name="bg0"/>), the sub-tile's top-left
-        /// corner pixel (<paramref name="bgCorner"/>), and the two standard Spriters Resource grid colors.
+        /// Returns <c>true</c> if the pixel is transparent (<c>alpha == 0</c>).
         /// </summary>
-        internal static bool IsBgColor(int c, int bg0, int bgCorner)
+        internal static bool IsTransparent(int c)
+        {
+            return ((c >> 24) & 0xFF) == 0;
+        }
+
+        /// <summary>
+        /// Determines whether a pixel in a newly imported (uncleaned) spritesheet belongs to the sheet's
+        /// background or divider grid. Checks <c>alpha == 0</c>, the sheet's top-left pixel (<paramref name="bg0"/>),
+        /// an optional sub-tile corner (<paramref name="bgCorner"/>), and the standard Spriters Resource sheet colors.
+        /// </summary>
+        internal static bool IsRawSheetBgColor(int c, int bg0, int bgCorner)
         {
             if (((c >> 24) & 0xFF) == 0) return true;
             int rgb = c & 0x00FFFFFF;
-            if (rgb == (bg0 & 0x00FFFFFF)) return true;
-            if (rgb == (bgCorner & 0x00FFFFFF)) return true;
-            if (rgb == 0x00709AD1) return true; // (112, 154, 209) blue divider grid
-            if (rgb == 0x009696FF) return true; // (150, 150, 255) lavender background
+            if (((bg0 >> 24) & 0xFF) != 0 && rgb == (bg0 & 0x00FFFFFF)) return true;
+            if (((bgCorner >> 24) & 0xFF) != 0 && rgb == (bgCorner & 0x00FFFFFF)) return true;
+            if (rgb == 0x008080FF) return true; // (128, 128, 255) outer sheet periwinkle background
+            if (rgb == 0x00709AD1) return true; // (112, 154, 209) 1px blue divider grid
+            if (rgb == 0x009696FF) return true; // (150, 150, 255) inner lavender sprite-box fill
             return false;
+        }
+
+        /// <summary>
+        /// Scans all <c>*.png</c> files in <paramref name="spritesDirectory"/> and strips opaque background and
+        /// grid colors into true <c>alpha = 0</c> transparency in-place. Already-transparent PNGs are skipped.
+        /// Returns the number of PNG files that were modified.
+        /// </summary>
+        public static int StripSpritesheetBackgrounds(string spritesDirectory)
+        {
+            if (string.IsNullOrEmpty(spritesDirectory) || !Directory.Exists(spritesDirectory)) return 0;
+
+            int modifiedCount = 0;
+            string[] files = Directory.GetFiles(spritesDirectory, "*.png");
+            for (int i = 0; i < files.Length; i++)
+            {
+                if (StripSingleSpritesheet(files[i]))
+                {
+                    modifiedCount++;
+                }
+            }
+            return modifiedCount;
+        }
+
+        /// <summary>
+        /// Strips opaque background and divider-grid pixels from a single spritesheet PNG file into <c>alpha = 0</c>.
+        /// Idempotent: returns <c>false</c> without rewriting the file if all background pixels are already transparent.
+        /// </summary>
+        public static bool StripSingleSpritesheet(string filePath)
+        {
+            if (string.IsNullOrEmpty(filePath) || !File.Exists(filePath)) return false;
+
+            byte[] fileBytes = File.ReadAllBytes(filePath);
+            using (MemoryStream ms = new MemoryStream(fileBytes))
+            using (Bitmap srcBmp = new Bitmap(ms))
+            using (Bitmap editBmp = new Bitmap(srcBmp.Width, srcBmp.Height, PixelFormat.Format32bppArgb))
+            {
+                int w = srcBmp.Width;
+                int h = srcBmp.Height;
+                Rectangle lockRect = new Rectangle(0, 0, w, h);
+
+                BitmapData srcData = srcBmp.LockBits(lockRect, ImageLockMode.ReadOnly, PixelFormat.Format32bppArgb);
+                BitmapData dstData = editBmp.LockBits(lockRect, ImageLockMode.WriteOnly, PixelFormat.Format32bppArgb);
+                bool modified = false;
+
+                try
+                {
+                    int bg0 = Marshal.ReadInt32(srcData.Scan0, 0);
+                    for (int y = 0; y < h; y++)
+                    {
+                        int srcRow = y * srcData.Stride;
+                        int dstRow = y * dstData.Stride;
+                        for (int x = 0; x < w; x++)
+                        {
+                            int c = Marshal.ReadInt32(srcData.Scan0, srcRow + (x << 2));
+                            if (IsRawSheetBgColor(c, bg0, bg0))
+                            {
+                                if (c != 0) modified = true;
+                                Marshal.WriteInt32(dstData.Scan0, dstRow + (x << 2), 0);
+                            }
+                            else
+                            {
+                                Marshal.WriteInt32(dstData.Scan0, dstRow + (x << 2), c);
+                            }
+                        }
+                    }
+                }
+                finally
+                {
+                    srcBmp.UnlockBits(srcData);
+                    editBmp.UnlockBits(dstData);
+                }
+
+                if (modified)
+                {
+                    editBmp.Save(filePath, ImageFormat.Png);
+                }
+                return modified;
+            }
         }
 
         /// <summary>
@@ -304,16 +387,16 @@ namespace KirbyTaskbarBuddy
         /// Extracts a walk, stand, or guard frame and automatically aligns Kirby's feet to
         /// <c>(PIVOT_X, PIVOT_Y)</c> so abilities with tall hats or wide weapons don't shift his body position.
         /// </summary>
-        private static SpriteTile ExtractAlignedTile(FastSheet rawSheet, Rectangle r, int bg0, int bgCorner, int[] scratch, bool isGuard = false)
+        private static SpriteTile ExtractAlignedTile(FastSheet rawSheet, Rectangle r, int[] scratch, bool isGuard = false)
         {
-            // Pass 1: Find the lowest non-background row (maxY) corresponding to the bottom of Kirby's feet.
+            // Pass 1: Find the lowest non-transparent row (maxY) corresponding to the bottom of Kirby's feet.
             int maxY = r.Height - 1;
             for (int dy = 0; dy < r.Height; dy++)
             {
                 for (int dx = 0; dx < r.Width; dx++)
                 {
                     int c = rawSheet.GetPixel(r.X + dx, r.Y + dy);
-                    if (!IsBgColor(c, bg0, bgCorner)) maxY = dy;
+                    if (!IsTransparent(c)) maxY = dy;
                 }
             }
 
@@ -326,7 +409,7 @@ namespace KirbyTaskbarBuddy
                 for (int dx = 0; dx < r.Width; dx++)
                 {
                     int c = rawSheet.GetPixel(r.X + dx, r.Y + dy);
-                    if (!IsBgColor(c, bg0, bgCorner))
+                    if (!IsTransparent(c))
                     {
                         if ((!isGuard || dy >= maxY - 1) && dx < feetMinX) feetMinX = dx;
                         if (dx > feetMaxX) feetMaxX = dx;
@@ -344,7 +427,7 @@ namespace KirbyTaskbarBuddy
                 for (int dx = 0; dx < r.Width; dx++)
                 {
                     int c = rawSheet.GetPixel(r.X + dx, r.Y + dy);
-                    if (!IsBgColor(c, bg0, bgCorner))
+                    if (!IsTransparent(c))
                     {
                         int tx = destX + dx;
                         int ty = destY + dy;
@@ -364,13 +447,10 @@ namespace KirbyTaskbarBuddy
         /// 2. The outer reflective bubble rim (<c>2, 877, 32, 34</c>) at 96% opacity, and
         /// 3. One of 15 scrolling rainbow gradient tiles (<paramref name="rainRect"/>) blended at 45% over Kirby and 68% over the interior.
         /// </summary>
-        private static SpriteTile ExtractMirrorGuardTile(FastSheet rawSheet, Rectangle rainRect, int bg0, int[] scratch)
+        private static SpriteTile ExtractMirrorGuardTile(FastSheet rawSheet, Rectangle rainRect, int[] scratch)
         {
             Rectangle kirbyRect = new Rectangle(37, 880, 31, 27);
             Rectangle bubbleRect = new Rectangle(2, 877, 32, 34);
-            int kirbyCorner = rawSheet.GetPixel(kirbyRect.X, kirbyRect.Y);
-            int rainCorner = rawSheet.GetPixel(rainRect.X, rainRect.Y);
-            int bubbleCorner = rawSheet.GetPixel(bubbleRect.X, bubbleRect.Y);
 
             // Place Guard Mirror Kirby at his exact floor-aligned position (bodyPivotX=17, maxY=25)
             // and center the 30x32 bubble symmetrically around him (extending 3px below his feet).
@@ -386,7 +466,7 @@ namespace KirbyTaskbarBuddy
                 for (int dx = 0; dx < rainRect.Width; dx++)
                 {
                     int rc = rawSheet.GetPixel(rainRect.X + dx, rainRect.Y + dy);
-                    if (IsBgColor(rc, bg0, rainCorner)) continue;
+                    if (IsTransparent(rc)) continue;
 
                     int tx = sphereDestX + dx;
                     int ty = sphereDestY + dy;
@@ -399,11 +479,11 @@ namespace KirbyTaskbarBuddy
                     if (kdx >= 0 && kdx < kirbyRect.Width && kdy >= 0 && kdy < kirbyRect.Height)
                     {
                         kc = rawSheet.GetPixel(kirbyRect.X + kdx, kirbyRect.Y + kdy);
-                        if (!IsBgColor(kc, bg0, kirbyCorner)) hasKirby = true;
+                        if (!IsTransparent(kc)) hasKirby = true;
                     }
 
                     int bc = rawSheet.GetPixel(bubbleRect.X + dx, bubbleRect.Y + dy);
-                    bool hasBubbleRim = !IsBgColor(bc, bg0, bubbleCorner);
+                    bool hasBubbleRim = !IsTransparent(bc);
                     if (hasBubbleRim)
                     {
                         int br = (bc >> 16) & 0xFF;
@@ -452,7 +532,7 @@ namespace KirbyTaskbarBuddy
         /// Extracts the 5-frame jump sequence. Uses frame 0's bottom edge (<c>refBottomY</c>) as a common
         /// vertical baseline so raised hats/weapons stay aligned across the somersault arc.
         /// </summary>
-        private static SpriteTile[] ExtractJumpTiles(FastSheet rawSheet, Rectangle[] jumpCoords, int bg0, int[] scratch)
+        private static SpriteTile[] ExtractJumpTiles(FastSheet rawSheet, Rectangle[] jumpCoords, int[] scratch)
         {
             if (jumpCoords == null || jumpCoords.Length == 0) return null;
             SpriteTile[] tiles = new SpriteTile[jumpCoords.Length];
@@ -472,7 +552,7 @@ namespace KirbyTaskbarBuddy
                     for (int dx = 0; dx < r.Width; dx++)
                     {
                         int c = rawSheet.GetPixel(r.X + dx, r.Y + dy);
-                        if (!IsBgColor(c, bg0, bg0))
+                        if (!IsTransparent(c))
                         {
                             if (dx < minX) minX = dx;
                             if (dx > maxX) maxX = dx;
@@ -490,7 +570,7 @@ namespace KirbyTaskbarBuddy
                     for (int dx = 0; dx < r.Width; dx++)
                     {
                         int c = rawSheet.GetPixel(r.X + dx, r.Y + dy);
-                        if (!IsBgColor(c, bg0, bg0))
+                        if (!IsTransparent(c))
                         {
                             int tx = destX + dx;
                             int ty = destY + dy;
@@ -507,10 +587,10 @@ namespace KirbyTaskbarBuddy
         }
 
         /// <summary>
-        /// Extracts a sprite frame and centers its non-background bounding box on <c>(PIVOT_X, PIVOT_Y)</c>
+        /// Extracts a sprite frame and centers its non-transparent bounding box on <c>(PIVOT_X, PIVOT_Y)</c>
         /// (used for projectiles or floating/flying characters with <see cref="PivotMode.Center"/>).
         /// </summary>
-        private static SpriteTile ExtractCenteredTile(FastSheet rawSheet, Rectangle r, int bg0, int bgCorner, int[] scratch)
+        private static SpriteTile ExtractCenteredTile(FastSheet rawSheet, Rectangle r, int[] scratch)
         {
             int minX = r.Width, maxX = -1, minY = r.Height, maxY = -1;
             for (int dy = 0; dy < r.Height; dy++)
@@ -518,7 +598,7 @@ namespace KirbyTaskbarBuddy
                 for (int dx = 0; dx < r.Width; dx++)
                 {
                     int c = rawSheet.GetPixel(r.X + dx, r.Y + dy);
-                    if (!IsBgColor(c, bg0, bgCorner))
+                    if (!IsTransparent(c))
                     {
                         if (dx < minX) minX = dx;
                         if (dx > maxX) maxX = dx;
@@ -530,14 +610,14 @@ namespace KirbyTaskbarBuddy
 
             int centerX = (minX <= maxX) ? (minX + maxX) / 2 : r.Width / 2;
             int centerY = (minY <= maxY) ? (minY + maxY) / 2 : r.Height / 2;
-            return ExtractCustomPivotTile(rawSheet, r, bg0, bgCorner, centerX, centerY, scratch);
+            return ExtractCustomPivotTile(rawSheet, r, centerX, centerY, scratch);
         }
 
         /// <summary>
         /// Extracts a sprite frame aligned to an explicit <c>(pivotX, pivotY)</c> coordinate within the source rectangle.
         /// When <paramref name="pivotY"/> is negative, aligns the bottom edge of the rectangle (<c>r.Height - 1</c>) to <c>PIVOT_Y</c>.
         /// </summary>
-        private static SpriteTile ExtractCustomPivotTile(FastSheet rawSheet, Rectangle r, int bg0, int bgCorner, int pivotX, int pivotY, int[] scratch)
+        private static SpriteTile ExtractCustomPivotTile(FastSheet rawSheet, Rectangle r, int pivotX, int pivotY, int[] scratch)
         {
             int actualPivotY = (pivotY < 0) ? (r.Height - 1) : pivotY;
             int destX = NativeMethods.PIVOT_X - pivotX;
@@ -549,7 +629,7 @@ namespace KirbyTaskbarBuddy
                 for (int dx = 0; dx < r.Width; dx++)
                 {
                     int c = rawSheet.GetPixel(r.X + dx, r.Y + dy);
-                    if (!IsBgColor(c, bg0, bgCorner))
+                    if (!IsTransparent(c))
                     {
                         int tx = destX + dx;
                         int ty = destY + dy;
@@ -567,7 +647,7 @@ namespace KirbyTaskbarBuddy
         /// Crops the 24x24 Normal Kirby walk frame into a GDI HICON for the Windows system tray.
         /// Returns the raw <paramref name="iconHandle"/> so it can be freed via <c>DestroyIcon</c> on exit.
         /// </summary>
-        private static void ExtractTrayIconFromNormalSheet(FastSheet normalSheet, int bg0, out Icon icon, out IntPtr iconHandle)
+        private static void ExtractTrayIconFromNormalSheet(FastSheet normalSheet, out Icon icon, out IntPtr iconHandle)
         {
             icon = null;
             iconHandle = IntPtr.Zero;
@@ -575,13 +655,12 @@ namespace KirbyTaskbarBuddy
             {
                 using (Bitmap crop = new Bitmap(24, 24, PixelFormat.Format32bppArgb))
                 {
-                    int bgRgb = bg0 & 0x00FFFFFF;
                     for (int y = 0; y < 24; y++)
                     {
                         for (int x = 0; x < 24; x++)
                         {
                             int c = normalSheet.GetPixel(32 + x, 125 + y);
-                            if ((c & 0x00FFFFFF) == bgRgb)
+                            if (IsTransparent(c))
                                 crop.SetPixel(x, y, Color.Transparent);
                             else
                                 crop.SetPixel(x, y, Color.FromArgb(255, (c >> 16) & 0xFF, (c >> 8) & 0xFF, c & 0xFF));

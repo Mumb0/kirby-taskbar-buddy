@@ -17,6 +17,9 @@ namespace KirbyTaskbarBuddy
     public class KirbyTaskbarBuddyContext : ApplicationContext
     {
         private const string RUN_REG_KEY = @"Software\Microsoft\Windows\CurrentVersion\Run";
+        private const string SETTINGS_REG_KEY = @"Software\KirbyTaskbarBuddy";
+        private const string REG_VAL_SCALE = "Scale";
+        private const string REG_VAL_SLEEP_SECONDS = "SleepTimeoutSeconds";
         private const string APP_NAME = "KirbyTaskbarBuddy";
         private const string LEGACY_APP_NAME = "KirbyWallpaperKeyBridge";
 
@@ -24,6 +27,7 @@ namespace KirbyTaskbarBuddy
         internal const double WALK_SPEED = 0.75;
         internal const double JUMP_INIT_VEL = 4.2;
         internal const double JUMP_GRAVITY = 0.18;
+        internal static readonly double[] SleepTimeoutValues = new double[] { 10.0, 30.0, 60.0, 180.0, 300.0, 600.0, -1.0 };
 
         // Static reference to the hook delegate prevents the GC from collecting the callback while unmanaged code holds it.
         private static NativeMethods.LowLevelKeyboardProc _proc;
@@ -90,6 +94,8 @@ namespace KirbyTaskbarBuddy
 
             FormDefinitions.PopulateForms(_forms, _keyToForm, out _currentForm);
             SpriteLoader.LoadAllSpritesheets(_forms, out _sleepFrames, out _loadedTrayIcon, out _trayIconHandle);
+            LoadSettings();
+            _kirbyX = -32 * _scale;
 
             _overlayItem = new MenuItem("Show Foreground Taskbar Kirby", OnToggleOverlay) { Checked = _overlayEnabled };
             _pauseItem = new MenuItem("Pause Key Switching", OnTogglePause);
@@ -112,7 +118,7 @@ namespace KirbyTaskbarBuddy
                 "10 Minutes",
                 "Never"
             };
-            _sleepTimeoutValues = new double[] { 10.0, 30.0, 60.0, 180.0, 300.0, 600.0, -1.0 };
+            _sleepTimeoutValues = SleepTimeoutValues;
             _sleepMenuItems = new MenuItem[sleepLabels.Length];
             for (int i = 0; i < sleepLabels.Length; i++)
             {
@@ -180,8 +186,70 @@ namespace KirbyTaskbarBuddy
             }
         }
 
+        /// <summary>
+        /// Clamps a candidate scale factor to the supported <c>1..4</c> range, falling back to <c>2</c> (Default).
+        /// </summary>
+        internal static int NormalizeScale(int scale)
+        {
+            return (scale >= 1 && scale <= 4) ? scale : 2;
+        }
+
+        /// <summary>
+        /// Validates a candidate sleep timeout against <see cref="SleepTimeoutValues"/>, falling back to <c>300.0</c> (5 Minutes).
+        /// </summary>
+        internal static double NormalizeSleepTimeout(double seconds)
+        {
+            for (int i = 0; i < SleepTimeoutValues.Length; i++)
+            {
+                if (SleepTimeoutValues[i] == seconds) return seconds;
+            }
+            return 300.0;
+        }
+
+        private void LoadSettings()
+        {
+            try
+            {
+                using (RegistryKey key = Registry.CurrentUser.OpenSubKey(SETTINGS_REG_KEY, false))
+                {
+                    if (key != null)
+                    {
+                        object rawScale = key.GetValue(REG_VAL_SCALE);
+                        if (rawScale != null)
+                        {
+                            _scale = NormalizeScale(Convert.ToInt32(rawScale, System.Globalization.CultureInfo.InvariantCulture));
+                        }
+
+                        object rawSleep = key.GetValue(REG_VAL_SLEEP_SECONDS);
+                        if (rawSleep != null)
+                        {
+                            _idleSleepSeconds = NormalizeSleepTimeout(Convert.ToDouble(rawSleep, System.Globalization.CultureInfo.InvariantCulture));
+                        }
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private void SaveSettings()
+        {
+            try
+            {
+                using (RegistryKey key = Registry.CurrentUser.CreateSubKey(SETTINGS_REG_KEY))
+                {
+                    if (key != null)
+                    {
+                        key.SetValue(REG_VAL_SCALE, _scale, RegistryValueKind.DWord);
+                        key.SetValue(REG_VAL_SLEEP_SECONDS, (int)_idleSleepSeconds, RegistryValueKind.DWord);
+                    }
+                }
+            }
+            catch { }
+        }
+
         private void SetScale(int newScale)
         {
+            newScale = NormalizeScale(newScale);
             if (_scale == newScale) return;
             _scale = newScale;
             _scale1xItem.Checked = (_scale == 1);
@@ -189,12 +257,13 @@ namespace KirbyTaskbarBuddy
             _scale3xItem.Checked = (_scale == 3);
             _scale4xItem.Checked = (_scale == 4);
             _lastRenderedTile = null;
+            SaveSettings();
             NativeMethods.TrimMemory();
         }
 
         private void SetSleepTimeout(double seconds)
         {
-            _idleSleepSeconds = seconds;
+            _idleSleepSeconds = NormalizeSleepTimeout(seconds);
             if (_sleepMenuItems != null && _sleepTimeoutValues != null)
             {
                 for (int i = 0; i < _sleepMenuItems.Length; i++)
@@ -206,6 +275,7 @@ namespace KirbyTaskbarBuddy
             {
                 WakeFromSleep(ref _sleepState, ref _sleepAnimTime);
             }
+            SaveSettings();
         }
 
         /// <summary>

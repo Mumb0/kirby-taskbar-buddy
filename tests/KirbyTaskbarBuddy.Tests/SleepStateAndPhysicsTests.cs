@@ -187,6 +187,26 @@ namespace KirbyTaskbarBuddy.Tests
             Assert.False(KirbyTaskbarBuddyContext.IsMouseNearKirby(new Point(500, 1008), kirbyX, workAreaBottom, scale, isJumping: true));
         }
 
+        [Fact]
+        public void NormalizeScale_And_NormalizeSleepTimeout_AcceptValidValuesAndFallbackOnInvalid()
+        {
+            Assert.Equal(1, KirbyTaskbarBuddyContext.NormalizeScale(1));
+            Assert.Equal(2, KirbyTaskbarBuddyContext.NormalizeScale(2));
+            Assert.Equal(3, KirbyTaskbarBuddyContext.NormalizeScale(3));
+            Assert.Equal(4, KirbyTaskbarBuddyContext.NormalizeScale(4));
+            Assert.Equal(2, KirbyTaskbarBuddyContext.NormalizeScale(0));
+            Assert.Equal(2, KirbyTaskbarBuddyContext.NormalizeScale(5));
+            Assert.Equal(2, KirbyTaskbarBuddyContext.NormalizeScale(-1));
+
+            foreach (double valid in KirbyTaskbarBuddyContext.SleepTimeoutValues)
+            {
+                Assert.Equal(valid, KirbyTaskbarBuddyContext.NormalizeSleepTimeout(valid));
+            }
+            Assert.Equal(300.0, KirbyTaskbarBuddyContext.NormalizeSleepTimeout(0.0));
+            Assert.Equal(300.0, KirbyTaskbarBuddyContext.NormalizeSleepTimeout(45.0));
+            Assert.Equal(300.0, KirbyTaskbarBuddyContext.NormalizeSleepTimeout(-99.0));
+        }
+
         private static FormDef CreateDummyFormWithStandFrames()
         {
             SpriteTile[] standTiles = CreateDummyTiles(2);

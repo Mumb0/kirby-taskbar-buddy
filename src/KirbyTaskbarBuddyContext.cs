@@ -93,7 +93,7 @@ namespace KirbyTaskbarBuddy {
         private int _lastRenderedX = int.MinValue;
         private int _lastRenderedY = int.MinValue;
         private SpriteTile _lastRenderedTile = null;
-        private int _topmostRefreshCounter = 0;
+        private IntPtr _lastForegroundWindow = IntPtr.Zero;
 
         // Throttles fullscreen and screen working-area queries to once every 15 ticks (~240ms)
         // and reuses a single StringBuilder to keep the 60Hz tick loop completely allocation-free.
@@ -176,10 +176,20 @@ namespace KirbyTaskbarBuddy {
                 Visible = true
             };
 
-            _overlay = new KirbyOverlayWindow();
-            _overlay.Show();
-            _enemyOverlay = new KirbyOverlayWindow();
             _cachedWorkArea = Screen.PrimaryScreen.WorkingArea;
+
+            // Initialize both layered surfaces (SourceConstantAlpha = 0 off-screen) before calling Show()
+            // so Windows/DWM never maps an uninitialized layered HWND, and show _enemyOverlay before _overlay
+            // so Kirby naturally sits above enemies in topmost Z-order without runtime Show()/Hide() churn.
+            _enemyOverlay = new KirbyOverlayWindow();
+            IntPtr enemyHandle = _enemyOverlay.Handle;
+            _enemyOverlay.ClearOverlay(_scale);
+            _enemyOverlay.Show();
+
+            _overlay = new KirbyOverlayWindow();
+            IntPtr overlayHandle = _overlay.Handle;
+            _overlay.ClearOverlay(_scale);
+            _overlay.Show();
 
             _stopwatch = Stopwatch.StartNew();
             _lastTickMs = _stopwatch.ElapsedMilliseconds;
@@ -573,23 +583,29 @@ namespace KirbyTaskbarBuddy {
             if (_envCheckCounter >= 15) {
                 _envCheckCounter = 0;
                 _cachedWorkArea = Screen.PrimaryScreen.WorkingArea;
-                _isFullscreenCached = IsFullscreenAppActive(_cachedWorkArea);
+                IntPtr fg = NativeMethods.GetForegroundWindow();
+                _isFullscreenCached = IsFullscreenAppActive(fg, _cachedWorkArea);
+
+                if (fg != _lastForegroundWindow) {
+                    _lastForegroundWindow = fg;
+                    if (_overlayEnabled && !_isFullscreenCached) {
+                        RefreshTopmostOrder();
+                    }
+                }
             }
 
             if (!_overlayEnabled || _isFullscreenCached) {
-                if (_overlay.Visible) {
-                    _overlay.Hide();
+                if (!_overlay.IsCleared) {
+                    _overlay.ClearOverlay(_scale);
+                    _lastRenderedTile = null;
                 }
 
-                if (_enemyOverlay != null && _enemyOverlay.Visible) {
-                    _enemyOverlay.Hide();
+                if (_enemyOverlay != null && !_enemyOverlay.IsCleared) {
+                    _enemyOverlay.ClearOverlay(_scale);
+                    _lastEnemyRenderedTile = null;
                 }
 
                 return;
-            }
-
-            if (!_overlay.Visible) {
-                _overlay.Show();
             }
 
             Rectangle workArea = _cachedWorkArea;
@@ -657,20 +673,8 @@ namespace KirbyTaskbarBuddy {
             int screenX = (int)Math.Round(_kirbyX) - halfWidth;
             int screenY = workArea.Bottom - (NativeMethods.PIVOT_Y + 1) * _scale - (int)Math.Round(_jumpY * _scale);
 
-            // Re-assert HWND_TOPMOST once per second (~60 ticks) so newly opened topmost bars don't cover Kirby or enemies,
-            // while keeping the enemy window layered directly behind Kirby's window.
-            _topmostRefreshCounter++;
-
-            if (_topmostRefreshCounter >= 60) {
-                _topmostRefreshCounter = 0;
-                NativeMethods.SetWindowPos(_overlay.Handle, new IntPtr(-1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010);
-
-                if (_enemyOverlay != null && _enemyOverlay.Visible && _enemyOverlay.IsHandleCreated) {
-                    NativeMethods.SetWindowPos(_enemyOverlay.Handle, _overlay.Handle, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010);
-                }
-            }
-
-            if (screenX != _lastRenderedX || screenY != _lastRenderedY || frameToRender != _lastRenderedTile) {
+            if (screenX != _lastRenderedX || screenY != _lastRenderedY || frameToRender != _lastRenderedTile ||
+                _overlay.IsCleared) {
                 _overlay.UpdateSpriteFrame(frameToRender, _scale, screenX, screenY);
                 _lastRenderedX = screenX;
                 _lastRenderedY = screenY;
@@ -679,13 +683,32 @@ namespace KirbyTaskbarBuddy {
         }
 
         /// <summary>
+        /// Re-asserts <c>HWND_TOPMOST</c> when the foreground window changes so clicking the taskbar
+        /// does not cover Kirby or active enemies, keeping <see cref="_enemyOverlay"/> directly behind <see cref="_overlay"/>.
+        /// </summary>
+        private void RefreshTopmostOrder() {
+            if (_overlay == null || !_overlay.IsHandleCreated) {
+                return;
+            }
+
+            IntPtr hwndTopMost = new IntPtr(-1);
+
+            if (_enemyOverlay != null && _enemyOverlay.IsHandleCreated) {
+                NativeMethods.SetWindowPos(_enemyOverlay.Handle, hwndTopMost, 0, 0, 0, 0, NativeMethods.TOPMOST_FLAGS);
+            }
+
+            NativeMethods.SetWindowPos(_overlay.Handle, hwndTopMost, 0, 0, 0, 0, NativeMethods.TOPMOST_FLAGS);
+        }
+
+        /// <summary>
         /// Spawns at most one enemy at a random interval on the right side of the screen,
         /// walks it left across the taskbar (even while Kirby is napping), and despawns it off the left edge.
         /// </summary>
         private void UpdateEnemy(double dtSeconds, double delta60, Rectangle workArea, int halfWidth) {
             if (!_combatEnabled || _enemyOverlay == null || _enemies.Count == 0) {
-                if (_enemyOverlay != null && _enemyOverlay.Visible) {
-                    _enemyOverlay.Hide();
+                if (_enemyOverlay != null && !_enemyOverlay.IsCleared) {
+                    _enemyOverlay.ClearOverlay(_scale);
+                    _lastEnemyRenderedTile = null;
                 }
 
                 return;
@@ -711,21 +734,12 @@ namespace KirbyTaskbarBuddy {
                 _activeEnemy = null;
                 _lastEnemyRenderedTile = null;
 
-                if (_enemyOverlay.Visible) {
-                    _enemyOverlay.Hide();
+                if (!_enemyOverlay.IsCleared) {
+                    _enemyOverlay.ClearOverlay(_scale);
                 }
 
                 _enemySpawnTimerSeconds = NextEnemySpawnInterval(_rng, ENEMY_SPAWN_MIN_SECONDS, ENEMY_SPAWN_MAX_SECONDS);
                 return;
-            }
-
-            if (!_enemyOverlay.Visible) {
-                _enemyOverlay.Show();
-
-                if (_overlay != null && _overlay.IsHandleCreated && _enemyOverlay.IsHandleCreated) {
-                    NativeMethods.SetWindowPos(_overlay.Handle, new IntPtr(-1), 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010);
-                    NativeMethods.SetWindowPos(_enemyOverlay.Handle, _overlay.Handle, 0, 0, 0, 0, 0x0001 | 0x0002 | 0x0010);
-                }
             }
 
             SpriteTile[] enemyFrames = _activeEnemy.Walk.Frames;
@@ -742,7 +756,7 @@ namespace KirbyTaskbarBuddy {
             int enemyScreenY = workArea.Bottom - (NativeMethods.PIVOT_Y + 1) * _scale;
 
             if (enemyScreenX != _lastEnemyRenderedX || enemyScreenY != _lastEnemyRenderedY ||
-                enemyTile != _lastEnemyRenderedTile) {
+                enemyTile != _lastEnemyRenderedTile || _enemyOverlay.IsCleared) {
                 _enemyOverlay.UpdateSpriteFrame(enemyTile, _scale, enemyScreenX, enemyScreenY);
                 _lastEnemyRenderedX = enemyScreenX;
                 _lastEnemyRenderedY = enemyScreenY;
@@ -751,13 +765,41 @@ namespace KirbyTaskbarBuddy {
         }
 
         /// <summary>
-        /// Checks whether the foreground window covers the entire primary monitor (including the taskbar area)
-        /// while ignoring the Windows desktop shell and taskbar classes.
+        /// Returns <c>true</c> if <paramref name="className"/> belongs to the Windows desktop shell, taskbar,
+        /// Start menu, Alt+Tab switcher, or XAML system island rather than a fullscreen user application.
         /// </summary>
-        private bool IsFullscreenAppActive(Rectangle work) {
-            try {
-                IntPtr fg = NativeMethods.GetForegroundWindow();
+        internal static bool IsShellOrOverlayWindowClass(string className) {
+            if (string.IsNullOrEmpty(className)) {
+                return false;
+            }
 
+            return className == "Progman"
+                || className == "WorkerW"
+                || className == "Shell_TrayWnd"
+                || className == "Shell_SecondaryTrayWnd"
+                || className == "Windows.UI.Core.CoreWindow"
+                || className == "XamlExplorerHostIslandWindow"
+                || className == "MultitaskingViewFrame"
+                || className == "ForegroundStaging";
+        }
+
+        /// <summary>
+        /// Returns <c>true</c> if the window extended style bits (<c>GWL_EXSTYLE</c>) indicate a non-activating,
+        /// click-through, or floating tool overlay rather than a standard fullscreen application window.
+        /// </summary>
+        internal static bool IsNonFullscreenOverlayExStyle(int exStyle) {
+            const int ignoreMask = NativeMethods.WS_EX_TRANSPARENT
+                                 | NativeMethods.WS_EX_NOACTIVATE
+                                 | NativeMethods.WS_EX_TOOLWINDOW;
+            return (exStyle & ignoreMask) != 0;
+        }
+
+        /// <summary>
+        /// Checks whether the foreground window covers the entire primary monitor (including the taskbar area)
+        /// while ignoring non-visible/minimized windows, transparent/tool overlays, and Windows shell classes.
+        /// </summary>
+        private bool IsFullscreenAppActive(IntPtr fg, Rectangle work) {
+            try {
                 if (fg == IntPtr.Zero || fg == _overlay.Handle) {
                     return false;
                 }
@@ -766,11 +808,21 @@ namespace KirbyTaskbarBuddy {
                     return false;
                 }
 
+                if (!NativeMethods.IsWindowVisible(fg) || NativeMethods.IsIconic(fg)) {
+                    return false;
+                }
+
+                int exStyle = NativeMethods.GetWindowLong(fg, NativeMethods.GWL_EXSTYLE);
+
+                if (IsNonFullscreenOverlayExStyle(exStyle)) {
+                    return false;
+                }
+
                 _classNameSb.Length = 0;
                 NativeMethods.GetClassName(fg, _classNameSb, _classNameSb.Capacity);
                 string cls = _classNameSb.ToString();
 
-                if (cls == "Progman" || cls == "WorkerW" || cls == "Shell_TrayWnd" || cls == "Shell_SecondaryTrayWnd") {
+                if (IsShellOrOverlayWindowClass(cls)) {
                     return false;
                 }
 
@@ -850,8 +902,8 @@ namespace KirbyTaskbarBuddy {
                 _activeEnemy = null;
                 _lastEnemyRenderedTile = null;
 
-                if (_enemyOverlay != null && _enemyOverlay.Visible) {
-                    _enemyOverlay.Hide();
+                if (_enemyOverlay != null && !_enemyOverlay.IsCleared) {
+                    _enemyOverlay.ClearOverlay(_scale);
                 }
 
                 _enemySpawnTimerSeconds = NextEnemySpawnInterval(_rng, ENEMY_SPAWN_MIN_SECONDS, ENEMY_SPAWN_MAX_SECONDS);

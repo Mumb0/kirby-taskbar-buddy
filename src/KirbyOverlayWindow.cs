@@ -23,6 +23,15 @@ namespace KirbyTaskbarBuddy
         private SpriteTile _renderedTile = null;
         private int _renderedScale = 0;
         private Rectangle _dirtyRect = Rectangle.Empty;
+        private bool _isCleared = false;
+
+        /// <summary>
+        /// Indicates whether the overlay is currently parked off-screen with zero opacity.
+        /// </summary>
+        public bool IsCleared
+        {
+            get { return _isCleared; }
+        }
 
         public KirbyOverlayWindow()
         {
@@ -76,6 +85,7 @@ namespace KirbyTaskbarBuddy
             _dibSize = 0;
             _renderedTile = null;
             _dirtyRect = Rectangle.Empty;
+            _isCleared = false;
         }
 
         /// <summary>
@@ -195,6 +205,46 @@ namespace KirbyTaskbarBuddy
                 0,
                 ref blend,
                 NativeMethods.ULW_ALPHA);
+
+            _isCleared = false;
+        }
+
+        /// <summary>
+        /// Hides the rendered sprite by setting the layered window's constant alpha to 0 and parking it
+        /// off-screen via <see cref="NativeMethods.UpdateLayeredWindow"/> without toggling <c>WS_VISIBLE</c>
+        /// (<c>ShowWindow</c>), avoiding DWM composition / Multiplane Overlay (MPO) mode switches.
+        /// </summary>
+        public void ClearOverlay(int scale)
+        {
+            if (IsDisposed || !IsHandleCreated || _isCleared) return;
+
+            int targetSize = NativeMethods.TILE_SIZE * scale;
+            EnsureDib(targetSize);
+            if (_memDc == IntPtr.Zero || _dibBits == IntPtr.Zero) return;
+
+            NativeMethods.SIZE size = new NativeMethods.SIZE { cx = targetSize, cy = targetSize };
+            NativeMethods.POINT pointSource = new NativeMethods.POINT { x = 0, y = 0 };
+            NativeMethods.POINT topPos = new NativeMethods.POINT { x = -32000, y = -32000 };
+            NativeMethods.BLENDFUNCTION blend = new NativeMethods.BLENDFUNCTION
+            {
+                BlendOp = NativeMethods.AC_SRC_OVER,
+                BlendFlags = 0,
+                SourceConstantAlpha = 0,
+                AlphaFormat = NativeMethods.AC_SRC_ALPHA
+            };
+
+            NativeMethods.UpdateLayeredWindow(
+                Handle,
+                IntPtr.Zero,
+                ref topPos,
+                ref size,
+                _memDc,
+                ref pointSource,
+                0,
+                ref blend,
+                NativeMethods.ULW_ALPHA);
+
+            _isCleared = true;
         }
 
         protected override void Dispose(bool disposing)

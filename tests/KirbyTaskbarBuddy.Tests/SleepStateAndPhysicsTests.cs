@@ -267,6 +267,52 @@ namespace KirbyTaskbarBuddy.Tests
             Assert.False(KirbyTaskbarBuddyContext.StepEnemyPhysics(ref enemyX, ref animTime, null, 1.0, scale, despawnLeftX));
         }
 
+        [Fact]
+        public void FullscreenFilterHelpers_IgnoreShellClassesAndOverlayStyles()
+        {
+            Assert.True(KirbyTaskbarBuddyContext.IsShellOrOverlayWindowClass("Progman"));
+            Assert.True(KirbyTaskbarBuddyContext.IsShellOrOverlayWindowClass("WorkerW"));
+            Assert.True(KirbyTaskbarBuddyContext.IsShellOrOverlayWindowClass("Shell_TrayWnd"));
+            Assert.True(KirbyTaskbarBuddyContext.IsShellOrOverlayWindowClass("Shell_SecondaryTrayWnd"));
+            Assert.True(KirbyTaskbarBuddyContext.IsShellOrOverlayWindowClass("Windows.UI.Core.CoreWindow"));
+            Assert.True(KirbyTaskbarBuddyContext.IsShellOrOverlayWindowClass("XamlExplorerHostIslandWindow"));
+            Assert.True(KirbyTaskbarBuddyContext.IsShellOrOverlayWindowClass("MultitaskingViewFrame"));
+            Assert.True(KirbyTaskbarBuddyContext.IsShellOrOverlayWindowClass("ForegroundStaging"));
+
+            Assert.False(KirbyTaskbarBuddyContext.IsShellOrOverlayWindowClass(null));
+            Assert.False(KirbyTaskbarBuddyContext.IsShellOrOverlayWindowClass(""));
+            Assert.False(KirbyTaskbarBuddyContext.IsShellOrOverlayWindowClass("UnityWndClass"));
+            Assert.False(KirbyTaskbarBuddyContext.IsShellOrOverlayWindowClass("UnrealWindow"));
+
+            Assert.True(KirbyTaskbarBuddyContext.IsNonFullscreenOverlayExStyle(NativeMethods.WS_EX_TRANSPARENT));
+            Assert.True(KirbyTaskbarBuddyContext.IsNonFullscreenOverlayExStyle(NativeMethods.WS_EX_NOACTIVATE));
+            Assert.True(KirbyTaskbarBuddyContext.IsNonFullscreenOverlayExStyle(NativeMethods.WS_EX_TOOLWINDOW));
+            Assert.False(KirbyTaskbarBuddyContext.IsNonFullscreenOverlayExStyle(0));
+            Assert.False(KirbyTaskbarBuddyContext.IsNonFullscreenOverlayExStyle(NativeMethods.WS_EX_TOPMOST));
+        }
+
+        [Fact]
+        public void KirbyOverlayWindow_ClearOverlayAndUpdateSpriteFrame_ToggleIsClearedStateWithoutShowHide()
+        {
+            using (KirbyOverlayWindow window = new KirbyOverlayWindow())
+            {
+                System.IntPtr handle = window.Handle;
+                Assert.NotEqual(System.IntPtr.Zero, handle);
+                Assert.False(window.IsCleared);
+
+                window.ClearOverlay(2);
+                Assert.True(window.IsCleared);
+
+                // Calling ClearOverlay again while already cleared is an idempotent no-op.
+                window.ClearOverlay(2);
+                Assert.True(window.IsCleared);
+
+                SpriteTile tile = CreateDummyTiles(1)[0];
+                window.UpdateSpriteFrame(tile, 2, 100, 100);
+                Assert.False(window.IsCleared);
+            }
+        }
+
         private static FormDef CreateDummyFormWithStandFrames()
         {
             SpriteTile[] standTiles = CreateDummyTiles(2);

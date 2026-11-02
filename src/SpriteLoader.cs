@@ -237,7 +237,7 @@ namespace KirbyTaskbarBuddy
         /// <summary>
         /// Packs an (A, R, G, B) color into 32-bit premultiplied ARGB format required by Win32 UpdateLayeredWindow.
         /// </summary>
-        private static int MakePremulArgb(int a, int r, int g, int b)
+        internal static int MakePremulArgb(int a, int r, int g, int b)
         {
             if (a <= 0) return 0;
             if (a >= 255) return (255 << 24) | (r << 16) | (g << 8) | b;
@@ -252,7 +252,7 @@ namespace KirbyTaskbarBuddy
         /// Checks alpha=0, the sheet's top-left pixel (<paramref name="bg0"/>), the sub-tile's top-left
         /// corner pixel (<paramref name="bgCorner"/>), and the two standard Spriters Resource grid colors.
         /// </summary>
-        private static bool IsBgColor(int c, int bg0, int bgCorner)
+        internal static bool IsBgColor(int c, int bg0, int bgCorner)
         {
             if (((c >> 24) & 0xFF) == 0) return true;
             int rgb = c & 0x00FFFFFF;
@@ -266,7 +266,7 @@ namespace KirbyTaskbarBuddy
         /// <summary>
         /// Crops the non-transparent bounding box out of the 80x80 scratch buffer into a compact <see cref="SpriteTile"/>.
         /// </summary>
-        private static SpriteTile BuildSpriteTile(int[] scratchTile)
+        internal static SpriteTile BuildSpriteTile(int[] scratchTile)
         {
             int tileSize = NativeMethods.TILE_SIZE;
             int minX = tileSize, maxX = -1, minY = tileSize, maxY = -1;

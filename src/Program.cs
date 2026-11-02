@@ -1,6 +1,9 @@
 using System;
+using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Windows.Forms;
+
+[assembly: InternalsVisibleTo("KirbyTaskbarBuddy.Tests")]
 
 namespace KirbyTaskbarBuddy
 {

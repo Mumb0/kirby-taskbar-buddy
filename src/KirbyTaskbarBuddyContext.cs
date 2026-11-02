@@ -21,8 +21,8 @@ namespace KirbyTaskbarBuddy
         private const string LEGACY_APP_NAME = "KirbyWallpaperKeyBridge";
 
         // Jump physics constants (calibrated in unscaled 1x pixels per 60Hz tick)
-        private const double JUMP_INIT_VEL = 4.2;
-        private const double JUMP_GRAVITY = 0.18;
+        internal const double JUMP_INIT_VEL = 4.2;
+        internal const double JUMP_GRAVITY = 0.18;
 
         // Static reference to the hook delegate prevents the GC from collecting the callback while unmanaged code holds it.
         private static NativeMethods.LowLevelKeyboardProc _proc;
@@ -200,16 +200,7 @@ namespace KirbyTaskbarBuddy
             }
             if (_idleSleepSeconds < 0)
             {
-                if (_sleepState == SleepState.Halting)
-                {
-                    _sleepState = SleepState.Awake;
-                    _sleepAnimTime = 0.0;
-                }
-                else if (_sleepState == SleepState.FallingAsleep || _sleepState == SleepState.Sleeping)
-                {
-                    _sleepState = SleepState.WakingUp;
-                    _sleepAnimTime = 0.0;
-                }
+                WakeFromSleep(ref _sleepState, ref _sleepAnimTime);
             }
         }
 
@@ -222,16 +213,159 @@ namespace KirbyTaskbarBuddy
             {
                 _lastInputMs = _stopwatch.ElapsedMilliseconds;
             }
-            if (_sleepState == SleepState.Halting)
+            WakeFromSleep(ref _sleepState, ref _sleepAnimTime);
+        }
+
+        /// <summary>
+        /// Transitions Kirby out of sleep when user activity occurs or when the sleep timer is disabled.
+        /// Interrupting <see cref="SleepState.Halting"/> returns directly to <see cref="SleepState.Awake"/>,
+        /// whereas interrupting <see cref="SleepState.FallingAsleep"/> or <see cref="SleepState.Sleeping"/>
+        /// triggers the startled <see cref="SleepState.WakingUp"/> animation.
+        /// </summary>
+        internal static void WakeFromSleep(ref SleepState sleepState, ref double sleepAnimTime)
+        {
+            if (sleepState == SleepState.Halting)
             {
-                _sleepState = SleepState.Awake;
-                _sleepAnimTime = 0.0;
+                sleepState = SleepState.Awake;
+                sleepAnimTime = 0.0;
             }
-            else if (_sleepState == SleepState.FallingAsleep || _sleepState == SleepState.Sleeping)
+            else if (sleepState == SleepState.FallingAsleep || sleepState == SleepState.Sleeping)
             {
-                _sleepState = SleepState.WakingUp;
-                _sleepAnimTime = 0.0;
+                sleepState = SleepState.WakingUp;
+                sleepAnimTime = 0.0;
             }
+        }
+
+        /// <summary>
+        /// Clamps frame delta time so system suspend/resume or debugger pauses do not teleport Kirby across the screen.
+        /// </summary>
+        internal static double ClampDeltaTime(double dtSeconds)
+        {
+            if (dtSeconds <= 0 || dtSeconds > 0.25) return 0.01667;
+            return dtSeconds;
+        }
+
+        /// <summary>
+        /// Advances the multi-stage sleep state machine by <paramref name="delta60"/> (60Hz-normalized ticks)
+        /// and returns the <see cref="SpriteTile"/> to render, or <c>null</c> once Kirby returns to <see cref="SleepState.Awake"/>.
+        /// </summary>
+        internal static SpriteTile AdvanceSleepState(
+            ref SleepState sleepState,
+            ref double sleepAnimTime,
+            double delta60,
+            FormDef currentForm,
+            SpriteTile[] sleepFrames)
+        {
+            if (sleepState == SleepState.Awake || sleepFrames == null || sleepFrames.Length < 8)
+            {
+                return null;
+            }
+
+            if (sleepState == SleepState.Halting)
+            {
+                sleepAnimTime += 0.05 * delta60;
+                int seqIdx = (int)Math.Floor(sleepAnimTime);
+                if (seqIdx >= FormDefinitions.HaltStandSeq.Length || currentForm == null || currentForm.Stand == null || !currentForm.Stand.HasFrames(2))
+                {
+                    sleepState = SleepState.FallingAsleep;
+                    sleepAnimTime = 0.0;
+                    return sleepFrames[FormDefinitions.FallAsleepSeq[0]];
+                }
+                return currentForm.Stand.Frames[FormDefinitions.HaltStandSeq[seqIdx]];
+            }
+            if (sleepState == SleepState.FallingAsleep)
+            {
+                sleepAnimTime += 0.05 * delta60;
+                int seqIdx = (int)Math.Floor(sleepAnimTime);
+                if (seqIdx >= FormDefinitions.FallAsleepSeq.Length)
+                {
+                    sleepState = SleepState.Sleeping;
+                    sleepAnimTime = 0.0;
+                    return sleepFrames[FormDefinitions.SleepLoopSeq[0]];
+                }
+                return sleepFrames[FormDefinitions.FallAsleepSeq[seqIdx]];
+            }
+            if (sleepState == SleepState.Sleeping)
+            {
+                sleepAnimTime += 0.045 * delta60;
+                int seqIdx = ((int)Math.Floor(sleepAnimTime)) % FormDefinitions.SleepLoopSeq.Length;
+                if (seqIdx < 0) seqIdx += FormDefinitions.SleepLoopSeq.Length;
+                return sleepFrames[FormDefinitions.SleepLoopSeq[seqIdx]];
+            }
+            if (sleepState == SleepState.WakingUp)
+            {
+                sleepAnimTime += 0.09 * delta60;
+                int seqIdx = (int)Math.Floor(sleepAnimTime);
+                if (seqIdx >= FormDefinitions.WakeUpSeq.Length)
+                {
+                    if (currentForm != null && currentForm.Stand != null && currentForm.Stand.HasFrames(2))
+                    {
+                        sleepState = SleepState.PostWakeStanding;
+                        sleepAnimTime = 0.0;
+                        return currentForm.Stand.Frames[FormDefinitions.PostWakeStandSeq[0]];
+                    }
+                    sleepState = SleepState.Awake;
+                    sleepAnimTime = 0.0;
+                    return null;
+                }
+                return sleepFrames[FormDefinitions.WakeUpSeq[seqIdx]];
+            }
+            if (sleepState == SleepState.PostWakeStanding)
+            {
+                sleepAnimTime += 0.06 * delta60;
+                int seqIdx = (int)Math.Floor(sleepAnimTime);
+                if (seqIdx >= FormDefinitions.PostWakeStandSeq.Length || currentForm == null || currentForm.Stand == null || !currentForm.Stand.HasFrames(2))
+                {
+                    sleepState = SleepState.Awake;
+                    sleepAnimTime = 0.0;
+                    return null;
+                }
+                return currentForm.Stand.Frames[FormDefinitions.PostWakeStandSeq[seqIdx]];
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// Checks whether the mouse pointer is within guard trigger range of Kirby's body on the taskbar
+        /// (Kirby only guards when on the ground, never mid-jump).
+        /// </summary>
+        internal static bool IsMouseNearKirby(Point mouse, double kirbyX, int workAreaBottom, int scale, bool isJumping)
+        {
+            if (isJumping) return false;
+            double kirbyCenterY = workAreaBottom - (16 * scale);
+            double distX = Math.Abs(mouse.X - kirbyX);
+            double distY = Math.Abs(mouse.Y - kirbyCenterY);
+            return (distX <= 24 * scale) && (distY <= 28 * scale);
+        }
+
+        /// <summary>
+        /// Advances Kirby's horizontal and vertical jump trajectory by <paramref name="delta60"/> ticks
+        /// and lands cleanly at <c>jumpY = 0</c> when touching the ground.
+        /// </summary>
+        internal static void StepJumpPhysics(ref bool isJumping, ref double kirbyX, ref double jumpY, ref double jumpVelY, double delta60)
+        {
+            kirbyX += 1.5 * delta60;
+            jumpY += jumpVelY * delta60;
+            jumpVelY -= JUMP_GRAVITY * delta60;
+            if (jumpY <= 0.0)
+            {
+                jumpY = 0.0;
+                jumpVelY = 0.0;
+                isJumping = false;
+            }
+        }
+
+        /// <summary>
+        /// Maps vertical jump velocity (<paramref name="jumpVelY"/>) to the 5 phases of Kirby's jump and mid-air somersault.
+        /// </summary>
+        internal static int GetJumpFrameIndex(double jumpVelY)
+        {
+            if (jumpVelY > 1.2) return 0;       // Rising launch
+            if (jumpVelY > 0.0) return 1;       // Apex somersault 1
+            if (jumpVelY > -1.2) return 2;      // Apex somersault 2
+            if (jumpVelY > -2.6) return 3;      // Early fall recovery
+            return 4;                           // Full fall descent
         }
 
         /// <summary>
@@ -241,10 +375,8 @@ namespace KirbyTaskbarBuddy
         private void OnTick(object sender, EventArgs e)
         {
             long nowMs = _stopwatch.ElapsedMilliseconds;
-            double dtSeconds = (nowMs - _lastTickMs) / 1000.0;
+            double dtSeconds = ClampDeltaTime((nowMs - _lastTickMs) / 1000.0);
             _lastTickMs = nowMs;
-            // Clamp delta time so system suspend/resume or debugger pauses don't teleport Kirby across the screen.
-            if (dtSeconds <= 0 || dtSeconds > 0.25) dtSeconds = 0.01667;
 
             Point mouse = Cursor.Position;
             bool hasInput = false;
@@ -300,96 +432,15 @@ namespace KirbyTaskbarBuddy
             int halfWidth = (NativeMethods.TILE_SIZE / 2) * _scale;
             double delta60 = dtSeconds * 60.0;
 
-            SpriteTile frameToRender = null;
-
             // Advance the multi-stage sleep state machine when Kirby is not in his normal Awake state.
-            if (_sleepState != SleepState.Awake && _sleepFrames != null && _sleepFrames.Length >= 8)
-            {
-                if (_sleepState == SleepState.Halting)
-                {
-                    _sleepAnimTime += 0.05 * delta60;
-                    int seqIdx = (int)Math.Floor(_sleepAnimTime);
-                    if (seqIdx >= FormDefinitions.HaltStandSeq.Length || _currentForm == null || _currentForm.Stand == null || !_currentForm.Stand.HasFrames(2))
-                    {
-                        _sleepState = SleepState.FallingAsleep;
-                        _sleepAnimTime = 0.0;
-                        frameToRender = _sleepFrames[FormDefinitions.FallAsleepSeq[0]];
-                    }
-                    else
-                    {
-                        frameToRender = _currentForm.Stand.Frames[FormDefinitions.HaltStandSeq[seqIdx]];
-                    }
-                }
-                else if (_sleepState == SleepState.FallingAsleep)
-                {
-                    _sleepAnimTime += 0.05 * delta60;
-                    int seqIdx = (int)Math.Floor(_sleepAnimTime);
-                    if (seqIdx >= FormDefinitions.FallAsleepSeq.Length)
-                    {
-                        _sleepState = SleepState.Sleeping;
-                        _sleepAnimTime = 0.0;
-                        frameToRender = _sleepFrames[FormDefinitions.SleepLoopSeq[0]];
-                    }
-                    else
-                    {
-                        frameToRender = _sleepFrames[FormDefinitions.FallAsleepSeq[seqIdx]];
-                    }
-                }
-                else if (_sleepState == SleepState.Sleeping)
-                {
-                    _sleepAnimTime += 0.045 * delta60;
-                    int seqIdx = ((int)Math.Floor(_sleepAnimTime)) % FormDefinitions.SleepLoopSeq.Length;
-                    if (seqIdx < 0) seqIdx += FormDefinitions.SleepLoopSeq.Length;
-                    frameToRender = _sleepFrames[FormDefinitions.SleepLoopSeq[seqIdx]];
-                }
-                else if (_sleepState == SleepState.WakingUp)
-                {
-                    _sleepAnimTime += 0.09 * delta60;
-                    int seqIdx = (int)Math.Floor(_sleepAnimTime);
-                    if (seqIdx >= FormDefinitions.WakeUpSeq.Length)
-                    {
-                        if (_currentForm != null && _currentForm.Stand != null && _currentForm.Stand.HasFrames(2))
-                        {
-                            _sleepState = SleepState.PostWakeStanding;
-                            _sleepAnimTime = 0.0;
-                            frameToRender = _currentForm.Stand.Frames[FormDefinitions.PostWakeStandSeq[0]];
-                        }
-                        else
-                        {
-                            _sleepState = SleepState.Awake;
-                            _sleepAnimTime = 0.0;
-                        }
-                    }
-                    else
-                    {
-                        frameToRender = _sleepFrames[FormDefinitions.WakeUpSeq[seqIdx]];
-                    }
-                }
-                else if (_sleepState == SleepState.PostWakeStanding)
-                {
-                    _sleepAnimTime += 0.06 * delta60;
-                    int seqIdx = (int)Math.Floor(_sleepAnimTime);
-                    if (seqIdx >= FormDefinitions.PostWakeStandSeq.Length || _currentForm == null || _currentForm.Stand == null || !_currentForm.Stand.HasFrames(2))
-                    {
-                        _sleepState = SleepState.Awake;
-                        _sleepAnimTime = 0.0;
-                    }
-                    else
-                    {
-                        frameToRender = _currentForm.Stand.Frames[FormDefinitions.PostWakeStandSeq[seqIdx]];
-                    }
-                }
-            }
+            SpriteTile frameToRender = AdvanceSleepState(ref _sleepState, ref _sleepAnimTime, delta60, _currentForm, _sleepFrames);
 
             if (_sleepState == SleepState.Awake)
             {
                 if (_currentForm == null || _currentForm.Walk == null || !_currentForm.Walk.HasFrames()) return;
 
                 // Check if mouse pointer is close to Kirby's body on the taskbar (only guards when on the ground).
-                double kirbyCenterY = workArea.Bottom - (16 * _scale);
-                double distX = Math.Abs(mouse.X - _kirbyX);
-                double distY = Math.Abs(mouse.Y - kirbyCenterY);
-                bool isMouseNear = !_isJumping && (distX <= 24 * _scale) && (distY <= 28 * _scale);
+                bool isMouseNear = IsMouseNearKirby(mouse, _kirbyX, workArea.Bottom, _scale, _isJumping);
 
                 bool useJump = _isJumping && _currentForm.Jump != null && _currentForm.Jump.HasFrames(5);
                 bool useGuard = !useJump && isMouseNear && _currentForm.Guard != null && _currentForm.Guard.HasFrames();
@@ -397,15 +448,7 @@ namespace KirbyTaskbarBuddy
 
                 if (_isJumping)
                 {
-                    _kirbyX += 1.5 * delta60;
-                    _jumpY += _jumpVelY * delta60;
-                    _jumpVelY -= JUMP_GRAVITY * delta60;
-                    if (_jumpY <= 0.0)
-                    {
-                        _jumpY = 0.0;
-                        _jumpVelY = 0.0;
-                        _isJumping = false;
-                    }
+                    StepJumpPhysics(ref _isJumping, ref _kirbyX, ref _jumpY, ref _jumpVelY, delta60);
                 }
                 else if (!isMouseNear)
                 {
@@ -429,12 +472,7 @@ namespace KirbyTaskbarBuddy
                 int frameIdx;
                 if (useJump)
                 {
-                    // Map vertical velocity (_jumpVelY) to the 5 phases of Kirby's jump & mid-air somersault.
-                    if (_jumpVelY > 1.2) frameIdx = 0;       // Rising launch
-                    else if (_jumpVelY > 0.0) frameIdx = 1;  // Apex somersault 1
-                    else if (_jumpVelY > -1.2) frameIdx = 2; // Apex somersault 2
-                    else if (_jumpVelY > -2.6) frameIdx = 3; // Early fall recovery
-                    else frameIdx = 4;                       // Full fall descent
+                    frameIdx = GetJumpFrameIndex(_jumpVelY);
                 }
                 else
                 {
@@ -519,16 +557,27 @@ namespace KirbyTaskbarBuddy
                 return;
             }
 
-            FormDef target;
-            if (_keyToForm.TryGetValue(keyName, out target))
+            FormDef nextForm = ResolveNextForm(_keyToForm, _currentForm, keyName);
+            if (nextForm != null && nextForm != _currentForm)
             {
-                FormDef normalForm = _keyToForm["0"];
-                FormDef nextForm = (_currentForm == target && target != normalForm) ? normalForm : target;
-                if (nextForm != null && nextForm != _currentForm)
-                {
-                    _currentForm = nextForm;
-                }
+                _currentForm = nextForm;
             }
+        }
+
+        /// <summary>
+        /// Resolves the next <see cref="FormDef"/> for a given ability key press.
+        /// Pressing the currently active copy ability's key a second time reverts Kirby to Normal form (<c>"0"</c>).
+        /// </summary>
+        internal static FormDef ResolveNextForm(Dictionary<string, FormDef> keyToForm, FormDef currentForm, string keyName)
+        {
+            if (keyToForm == null || keyName == null) return currentForm;
+
+            FormDef target;
+            if (!keyToForm.TryGetValue(keyName, out target)) return currentForm;
+
+            FormDef normalForm;
+            keyToForm.TryGetValue("0", out normalForm);
+            return (currentForm == target && target != normalForm) ? normalForm : target;
         }
 
         private void OnToggleOverlay(object sender, EventArgs e)

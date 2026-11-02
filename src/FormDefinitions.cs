@@ -100,6 +100,19 @@ namespace KirbyTaskbarBuddy
     }
 
     /// <summary>
+    /// Defines an enemy type, its source spritesheet filename, movement speed,
+    /// and its <see cref="AnimClip"/> definitions.
+    /// </summary>
+    public sealed class EnemyDef
+    {
+        public string Name;
+        public string FileName;
+        public double WalkSpeed;
+
+        public AnimClip Walk;
+    }
+
+    /// <summary>
     /// Catalog of spritesheet coordinates, builder helpers, and frame sequences for all 19 copy abilities and sleep animations.
     /// </summary>
     public static class FormDefinitions
@@ -191,6 +204,11 @@ namespace KirbyTaskbarBuddy
         public static AnimClip WalkClip(params Rectangle[] rects)
         {
             return Clip(rects, 0.1, true, PivotMode.FeetBottom4Rows, WalkPingPongSeq);
+        }
+
+        public static AnimClip EnemyWalkClip(params Rectangle[] rects)
+        {
+            return Clip(rects, 0.08, true, PivotMode.FeetBottom4Rows);
         }
 
         public static AnimClip GuardClip(params Rectangle[] rects)
@@ -341,6 +359,22 @@ namespace KirbyTaskbarBuddy
                 GuardClip(Row(204, 26, 25, 152, 181)),
                 JumpClip(R(6, 203, 24, 28), R(35, 206, 23, 24), R(63, 207, 22, 25), R(90, 204, 24, 26), R(119, 203, 23, 28)),
                 StandClip(Row(37, 24, 27, 35, 64)));
+        }
+
+        /// <summary>
+        /// Registers enemy types and their spritesheet animation clips.
+        /// </summary>
+        public static void PopulateEnemies(List<EnemyDef> enemies)
+        {
+            if (enemies == null) return;
+
+            enemies.Add(new EnemyDef
+            {
+                Name = "waddle-dee",
+                FileName = "enemy-waddle-dee.png",
+                WalkSpeed = 0.55,
+                Walk = EnemyWalkClip(R(5, 57, 24, 24), R(33, 57, 22, 24))
+            });
         }
 
         private static void AddForm(

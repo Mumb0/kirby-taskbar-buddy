@@ -89,6 +89,20 @@ namespace KirbyTaskbarBuddy
             out Icon trayIcon,
             out IntPtr trayIconHandle)
         {
+            LoadAllSpritesheets(forms, null, out sleepFrames, out trayIcon, out trayIconHandle);
+        }
+
+        /// <summary>
+        /// Decodes all ability, enemy, and sleep spritesheets once at startup into compact <see cref="SpriteTile"/> arrays,
+        /// and extracts the 24x24 system tray icon from <c>kirby-normal.png</c>.
+        /// </summary>
+        public static void LoadAllSpritesheets(
+            List<FormDef> forms,
+            List<EnemyDef> enemies,
+            out SpriteTile[] sleepFrames,
+            out Icon trayIcon,
+            out IntPtr trayIconHandle)
+        {
             sleepFrames = null;
             trayIcon = null;
             trayIconHandle = IntPtr.Zero;
@@ -96,27 +110,45 @@ namespace KirbyTaskbarBuddy
             // Single reusable 80x80 scratch canvas shared across all frame extractions at startup.
             int[] scratch = new int[NativeMethods.TILE_SIZE * NativeMethods.TILE_SIZE];
 
-            foreach (FormDef form in forms)
+            if (forms != null)
             {
-                int reqW = 64, reqH = 160;
-                ExpandBounds(form.Walk, ref reqW, ref reqH);
-                ExpandBounds(form.Guard, ref reqW, ref reqH);
-                ExpandBounds(form.Jump, ref reqW, ref reqH);
-                ExpandBounds(form.Stand, ref reqW, ref reqH);
-
-                using (FastSheet rawSheet = OpenSpriteSheet(form.FileName, reqW, reqH))
+                foreach (FormDef form in forms)
                 {
-                    if (rawSheet == null) continue;
+                    int reqW = 64, reqH = 160;
+                    ExpandBounds(form.Walk, ref reqW, ref reqH);
+                    ExpandBounds(form.Guard, ref reqW, ref reqH);
+                    ExpandBounds(form.Jump, ref reqW, ref reqH);
+                    ExpandBounds(form.Stand, ref reqW, ref reqH);
 
-                    if (form.Name == "normal" && trayIcon == null)
+                    using (FastSheet rawSheet = OpenSpriteSheet(form.FileName, reqW, reqH))
                     {
-                        ExtractTrayIconFromNormalSheet(rawSheet, out trayIcon, out trayIconHandle);
-                    }
+                        if (rawSheet == null) continue;
 
-                    LoadClip(rawSheet, form.Walk, scratch);
-                    LoadClip(rawSheet, form.Guard, scratch);
-                    LoadClip(rawSheet, form.Jump, scratch);
-                    LoadClip(rawSheet, form.Stand, scratch);
+                        if (form.Name == "normal" && trayIcon == null)
+                        {
+                            ExtractTrayIconFromNormalSheet(rawSheet, out trayIcon, out trayIconHandle);
+                        }
+
+                        LoadClip(rawSheet, form.Walk, scratch);
+                        LoadClip(rawSheet, form.Guard, scratch);
+                        LoadClip(rawSheet, form.Jump, scratch);
+                        LoadClip(rawSheet, form.Stand, scratch);
+                    }
+                }
+            }
+
+            if (enemies != null)
+            {
+                foreach (EnemyDef enemy in enemies)
+                {
+                    int reqW = 64, reqH = 96;
+                    ExpandBounds(enemy.Walk, ref reqW, ref reqH);
+
+                    using (FastSheet rawSheet = OpenSpriteSheet(enemy.FileName, reqW, reqH))
+                    {
+                        if (rawSheet == null) continue;
+                        LoadClip(rawSheet, enemy.Walk, scratch);
+                    }
                 }
             }
 

@@ -25,6 +25,7 @@
   <ItemGroup>
     <Compile Include="src\**\*.cs" />
     <EmbeddedResource Include="sprites\kirby-*.png" LogicalName="%(Filename)%(Extension)" />
+    <EmbeddedResource Include="sprites\enemy-*.png" LogicalName="%(Filename)%(Extension)" />
   </ItemGroup>
 
 </Project>

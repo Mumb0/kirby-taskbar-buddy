@@ -90,6 +90,21 @@ namespace KirbyTaskbarBuddy.Tests
         }
 
         [Fact]
+        public void PopulateEnemies_RegistersWaddleDeeWithValidWalkClipAndSpeed()
+        {
+            List<EnemyDef> enemies = new List<EnemyDef>();
+            FormDefinitions.PopulateEnemies(enemies);
+
+            Assert.Single(enemies);
+            EnemyDef waddleDee = enemies[0];
+            Assert.Equal("waddle-dee", waddleDee.Name);
+            Assert.Equal("enemy-waddle-dee.png", waddleDee.FileName);
+            Assert.True(waddleDee.WalkSpeed > 0.0 && waddleDee.WalkSpeed < KirbyTaskbarBuddyContext.WALK_SPEED);
+            AssertClipDefinitionValid(waddleDee.Name, "Walk", waddleDee.Walk, minRects: 2);
+            Assert.Equal(2, waddleDee.Walk.SourceRects.Length);
+        }
+
+        [Fact]
         public void BuilderHelpers_RowAndStrip_ProduceExpectedRectangles()
         {
             Rectangle[] row = FormDefinitions.Row(10, 24, 32, 5, 35, 65);

@@ -17,6 +17,9 @@ namespace KirbyTaskbarBuddy.Tests
             FormDef normalForm;
             FormDefinitions.PopulateForms(forms, keyToForm, out normalForm);
 
+            List<EnemyDef> enemies = new List<EnemyDef>();
+            FormDefinitions.PopulateEnemies(enemies);
+
             Assembly appAssembly = typeof(FormDefinitions).Assembly;
 
             foreach (FormDef form in forms)
@@ -44,6 +47,18 @@ namespace KirbyTaskbarBuddy.Tests
                 }
             }
 
+            foreach (EnemyDef enemy in enemies)
+            {
+                using (Stream stream = appAssembly.GetManifestResourceStream(enemy.FileName))
+                {
+                    Assert.True(stream != null, "Missing embedded resource: " + enemy.FileName);
+                    using (Bitmap bmp = new Bitmap(stream))
+                    {
+                        AssertRectsWithinBitmap(enemy.Name, "Walk", enemy.Walk.SourceRects, bmp);
+                    }
+                }
+            }
+
             using (Stream sleepStream = appAssembly.GetManifestResourceStream("kirby-sleep.png"))
             {
                 Assert.NotNull(sleepStream);
@@ -62,6 +77,9 @@ namespace KirbyTaskbarBuddy.Tests
             FormDef normalForm;
             FormDefinitions.PopulateForms(forms, keyToForm, out normalForm);
 
+            List<EnemyDef> enemies = new List<EnemyDef>();
+            FormDefinitions.PopulateEnemies(enemies);
+
             Assembly appAssembly = typeof(FormDefinitions).Assembly;
 
             foreach (FormDef form in forms)
@@ -72,6 +90,17 @@ namespace KirbyTaskbarBuddy.Tests
                     Assert.True(
                         bmp.GetPixel(0, 0).A == 0,
                         string.Format("{0} top-left pixel (0,0) is not transparent; run clean-sprites.bat or SpriteLoader.StripSpritesheetBackgrounds", form.FileName));
+                }
+            }
+
+            foreach (EnemyDef enemy in enemies)
+            {
+                using (Stream stream = appAssembly.GetManifestResourceStream(enemy.FileName))
+                using (Bitmap bmp = new Bitmap(stream))
+                {
+                    Assert.True(
+                        bmp.GetPixel(0, 0).A == 0,
+                        string.Format("{0} top-left pixel (0,0) is not transparent; run clean-sprites.bat or SpriteLoader.StripSpritesheetBackgrounds", enemy.FileName));
                 }
             }
 
@@ -90,11 +119,14 @@ namespace KirbyTaskbarBuddy.Tests
             FormDef normalForm;
             FormDefinitions.PopulateForms(forms, keyToForm, out normalForm);
 
+            List<EnemyDef> enemies = new List<EnemyDef>();
+            FormDefinitions.PopulateEnemies(enemies);
+
             SpriteTile[] sleepFrames;
             Icon trayIcon;
             IntPtr trayIconHandle;
 
-            SpriteLoader.LoadAllSpritesheets(forms, out sleepFrames, out trayIcon, out trayIconHandle);
+            SpriteLoader.LoadAllSpritesheets(forms, enemies, out sleepFrames, out trayIcon, out trayIconHandle);
             try
             {
                 foreach (FormDef form in forms)
@@ -103,6 +135,11 @@ namespace KirbyTaskbarBuddy.Tests
                     AssertLoadedClipValid(form.Name, "Guard", form.Guard, expectedMinFrames: 2);
                     AssertLoadedClipValid(form.Name, "Jump", form.Jump, expectedMinFrames: 5);
                     AssertLoadedClipValid(form.Name, "Stand", form.Stand, expectedMinFrames: 2);
+                }
+
+                foreach (EnemyDef enemy in enemies)
+                {
+                    AssertLoadedClipValid(enemy.Name, "Walk", enemy.Walk, expectedMinFrames: 2);
                 }
 
                 Assert.NotNull(sleepFrames);

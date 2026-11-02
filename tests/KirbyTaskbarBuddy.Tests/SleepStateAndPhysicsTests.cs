@@ -207,6 +207,66 @@ namespace KirbyTaskbarBuddy.Tests
             Assert.Equal(300.0, KirbyTaskbarBuddyContext.NormalizeSleepTimeout(-99.0));
         }
 
+        [Fact]
+        public void NextEnemySpawnInterval_ReturnsDelayWithinConfiguredBounds_AndHandlesEdgeCases()
+        {
+            System.Random rng = new System.Random(12345);
+            for (int i = 0; i < 100; i++)
+            {
+                double delay = KirbyTaskbarBuddyContext.NextEnemySpawnInterval(
+                    rng,
+                    KirbyTaskbarBuddyContext.ENEMY_SPAWN_MIN_SECONDS,
+                    KirbyTaskbarBuddyContext.ENEMY_SPAWN_MAX_SECONDS);
+                Assert.InRange(delay, KirbyTaskbarBuddyContext.ENEMY_SPAWN_MIN_SECONDS, KirbyTaskbarBuddyContext.ENEMY_SPAWN_MAX_SECONDS);
+            }
+
+            Assert.Equal(5.0, KirbyTaskbarBuddyContext.NextEnemySpawnInterval(null, 5.0, 600.0));
+            Assert.Equal(10.0, KirbyTaskbarBuddyContext.NextEnemySpawnInterval(rng, 10.0, 5.0));
+        }
+
+        [Fact]
+        public void StepEnemyPhysics_WalksRightToLeftScaledByFactor_AndSignalsDespawnAtLeftEdge()
+        {
+            SpriteTile[] walkTiles = CreateDummyTiles(6);
+            EnemyDef enemy = new EnemyDef
+            {
+                Name = "waddle-dee",
+                WalkSpeed = 0.55,
+                Walk = new AnimClip
+                {
+                    Speed = 0.1,
+                    RawFrames = walkTiles,
+                    Frames = walkTiles
+                }
+            };
+
+            double enemyX = 100.0;
+            double animTime = 0.0;
+            int scale = 2;
+            int despawnLeftX = -80;
+
+            // Single 60Hz tick at 2x scale moves enemy left by 0.55 * 2 = 1.1px and advances animTime by 0.1.
+            bool active = KirbyTaskbarBuddyContext.StepEnemyPhysics(ref enemyX, ref animTime, enemy, 1.0, scale, despawnLeftX);
+            Assert.True(active);
+            Assert.Equal(98.9, enemyX, 5);
+            Assert.Equal(0.1, animTime, 5);
+
+            // Step until enemy walks past despawnLeftX (-80).
+            int ticks = 0;
+            while (active && ticks < 500)
+            {
+                active = KirbyTaskbarBuddyContext.StepEnemyPhysics(ref enemyX, ref animTime, enemy, 1.0, scale, despawnLeftX);
+                ticks++;
+            }
+
+            Assert.False(active);
+            Assert.True(enemyX < despawnLeftX);
+            Assert.True(animTime > 15.0);
+
+            // Null enemy or clip without frames immediately returns false.
+            Assert.False(KirbyTaskbarBuddyContext.StepEnemyPhysics(ref enemyX, ref animTime, null, 1.0, scale, despawnLeftX));
+        }
+
         private static FormDef CreateDummyFormWithStandFrames()
         {
             SpriteTile[] standTiles = CreateDummyTiles(2);

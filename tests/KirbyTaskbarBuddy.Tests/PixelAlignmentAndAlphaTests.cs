@@ -40,11 +40,14 @@ namespace KirbyTaskbarBuddy.Tests
             FormDef normalForm;
             FormDefinitions.PopulateForms(forms, keyToForm, out normalForm);
 
+            List<EnemyDef> enemies = new List<EnemyDef>();
+            FormDefinitions.PopulateEnemies(enemies);
+
             SpriteTile[] sleepFrames;
             Icon trayIcon;
             IntPtr trayIconHandle;
 
-            SpriteLoader.LoadAllSpritesheets(forms, out sleepFrames, out trayIcon, out trayIconHandle);
+            SpriteLoader.LoadAllSpritesheets(forms, enemies, out sleepFrames, out trayIcon, out trayIconHandle);
             try
             {
                 foreach (FormDef form in forms)
@@ -53,6 +56,11 @@ namespace KirbyTaskbarBuddy.Tests
                     AssertClipPremultipliedAlpha(form.Name, "Guard", form.Guard);
                     AssertClipPremultipliedAlpha(form.Name, "Jump", form.Jump);
                     AssertClipPremultipliedAlpha(form.Name, "Stand", form.Stand);
+                }
+
+                foreach (EnemyDef enemy in enemies)
+                {
+                    AssertClipPremultipliedAlpha(enemy.Name, "Walk", enemy.Walk);
                 }
 
                 for (int i = 0; i < sleepFrames.Length; i++)
@@ -75,11 +83,14 @@ namespace KirbyTaskbarBuddy.Tests
             FormDef normalForm;
             FormDefinitions.PopulateForms(forms, keyToForm, out normalForm);
 
+            List<EnemyDef> enemies = new List<EnemyDef>();
+            FormDefinitions.PopulateEnemies(enemies);
+
             SpriteTile[] sleepFrames;
             Icon trayIcon;
             IntPtr trayIconHandle;
 
-            SpriteLoader.LoadAllSpritesheets(forms, out sleepFrames, out trayIcon, out trayIconHandle);
+            SpriteLoader.LoadAllSpritesheets(forms, enemies, out sleepFrames, out trayIcon, out trayIconHandle);
             try
             {
                 foreach (FormDef form in forms)
@@ -101,6 +112,11 @@ namespace KirbyTaskbarBuddy.Tests
                     {
                         AssertFeetAlignedToFloor(form.Name, "Guard", form.Guard.RawFrames);
                     }
+                }
+
+                foreach (EnemyDef enemy in enemies)
+                {
+                    AssertFeetAlignedToFloor(enemy.Name, "Walk", enemy.Walk.RawFrames);
                 }
 
                 for (int i = 0; i < sleepFrames.Length; i++)

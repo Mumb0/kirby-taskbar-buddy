@@ -273,7 +273,7 @@ namespace KirbyTaskbarBuddy
                 double idleSeconds = (nowMs - _lastInputMs) / 1000.0;
                 if (idleSeconds >= _idleSleepSeconds)
                 {
-                    bool hasStandFrames = (_currentForm != null && _currentForm.StandFrames != null && _currentForm.StandFrames.Length >= 2);
+                    bool hasStandFrames = (_currentForm != null && _currentForm.Stand != null && _currentForm.Stand.HasFrames(2));
                     _sleepState = hasStandFrames ? SleepState.Halting : SleepState.FallingAsleep;
                     _sleepAnimTime = 0.0;
                 }
@@ -309,7 +309,7 @@ namespace KirbyTaskbarBuddy
                 {
                     _sleepAnimTime += 0.05 * delta60;
                     int seqIdx = (int)Math.Floor(_sleepAnimTime);
-                    if (seqIdx >= FormDefinitions.HaltStandSeq.Length || _currentForm == null || _currentForm.StandFrames == null || _currentForm.StandFrames.Length < 2)
+                    if (seqIdx >= FormDefinitions.HaltStandSeq.Length || _currentForm == null || _currentForm.Stand == null || !_currentForm.Stand.HasFrames(2))
                     {
                         _sleepState = SleepState.FallingAsleep;
                         _sleepAnimTime = 0.0;
@@ -317,7 +317,7 @@ namespace KirbyTaskbarBuddy
                     }
                     else
                     {
-                        frameToRender = _currentForm.StandFrames[FormDefinitions.HaltStandSeq[seqIdx]];
+                        frameToRender = _currentForm.Stand.Frames[FormDefinitions.HaltStandSeq[seqIdx]];
                     }
                 }
                 else if (_sleepState == SleepState.FallingAsleep)
@@ -348,11 +348,11 @@ namespace KirbyTaskbarBuddy
                     int seqIdx = (int)Math.Floor(_sleepAnimTime);
                     if (seqIdx >= FormDefinitions.WakeUpSeq.Length)
                     {
-                        if (_currentForm != null && _currentForm.StandFrames != null && _currentForm.StandFrames.Length >= 2)
+                        if (_currentForm != null && _currentForm.Stand != null && _currentForm.Stand.HasFrames(2))
                         {
                             _sleepState = SleepState.PostWakeStanding;
                             _sleepAnimTime = 0.0;
-                            frameToRender = _currentForm.StandFrames[FormDefinitions.PostWakeStandSeq[0]];
+                            frameToRender = _currentForm.Stand.Frames[FormDefinitions.PostWakeStandSeq[0]];
                         }
                         else
                         {
@@ -369,25 +369,31 @@ namespace KirbyTaskbarBuddy
                 {
                     _sleepAnimTime += 0.06 * delta60;
                     int seqIdx = (int)Math.Floor(_sleepAnimTime);
-                    if (seqIdx >= FormDefinitions.PostWakeStandSeq.Length || _currentForm == null || _currentForm.StandFrames == null || _currentForm.StandFrames.Length < 2)
+                    if (seqIdx >= FormDefinitions.PostWakeStandSeq.Length || _currentForm == null || _currentForm.Stand == null || !_currentForm.Stand.HasFrames(2))
                     {
                         _sleepState = SleepState.Awake;
                         _sleepAnimTime = 0.0;
                     }
                     else
                     {
-                        frameToRender = _currentForm.StandFrames[FormDefinitions.PostWakeStandSeq[seqIdx]];
+                        frameToRender = _currentForm.Stand.Frames[FormDefinitions.PostWakeStandSeq[seqIdx]];
                     }
                 }
             }
 
             if (_sleepState == SleepState.Awake)
             {
+                if (_currentForm == null || _currentForm.Walk == null || !_currentForm.Walk.HasFrames()) return;
+
                 // Check if mouse pointer is close to Kirby's body on the taskbar (only guards when on the ground).
                 double kirbyCenterY = workArea.Bottom - (16 * _scale);
                 double distX = Math.Abs(mouse.X - _kirbyX);
                 double distY = Math.Abs(mouse.Y - kirbyCenterY);
                 bool isMouseNear = !_isJumping && (distX <= 24 * _scale) && (distY <= 28 * _scale);
+
+                bool useJump = _isJumping && _currentForm.Jump != null && _currentForm.Jump.HasFrames(5);
+                bool useGuard = !useJump && isMouseNear && _currentForm.Guard != null && _currentForm.Guard.HasFrames();
+                AnimClip activeClip = useJump ? _currentForm.Jump : (useGuard ? _currentForm.Guard : _currentForm.Walk);
 
                 if (_isJumping)
                 {
@@ -404,12 +410,12 @@ namespace KirbyTaskbarBuddy
                 else if (!isMouseNear)
                 {
                     _kirbyX += 1.5 * delta60;
-                    _animTime += 0.1 * delta60;
+                    _animTime += activeClip.Speed * delta60;
                 }
                 else
                 {
                     // Match SNES Kirby Super Star guard flash / shield shimmer speed (4 frames per state @ 60Hz = 15 FPS).
-                    _animTime += 0.25 * delta60;
+                    _animTime += activeClip.Speed * delta60;
                 }
 
                 // Wrap Kirby seamlessly from the right edge of the monitor back to the left edge.
@@ -418,11 +424,7 @@ namespace KirbyTaskbarBuddy
                     _kirbyX = workArea.Left - halfWidth;
                 }
 
-                if (_currentForm == null || _currentForm.Frames == null) return;
-
-                bool useJump = _isJumping && _currentForm.JumpFrames != null && _currentForm.JumpFrames.Length >= 5;
-                bool useGuard = !useJump && isMouseNear && _currentForm.GuardFrames != null && _currentForm.GuardFrames.Length > 0;
-                SpriteTile[] activeFrames = useJump ? _currentForm.JumpFrames : (useGuard ? _currentForm.GuardFrames : _currentForm.Frames);
+                SpriteTile[] activeFrames = activeClip.Frames;
 
                 int frameIdx;
                 if (useJump)

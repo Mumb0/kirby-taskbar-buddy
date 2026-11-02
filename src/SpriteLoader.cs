@@ -98,64 +98,25 @@ namespace KirbyTaskbarBuddy
             foreach (FormDef form in forms)
             {
                 int reqW = 64, reqH = 160;
-                ExpandBounds(form.Coords, ref reqW, ref reqH);
-                ExpandBounds(form.GuardCoords, ref reqW, ref reqH);
-                ExpandBounds(form.JumpCoords, ref reqW, ref reqH);
-                ExpandBounds(form.StandCoords, ref reqW, ref reqH);
+                ExpandBounds(form.Walk, ref reqW, ref reqH);
+                ExpandBounds(form.Guard, ref reqW, ref reqH);
+                ExpandBounds(form.Jump, ref reqW, ref reqH);
+                ExpandBounds(form.Stand, ref reqW, ref reqH);
 
                 using (FastSheet rawSheet = OpenSpriteSheet(form.FileName, reqW, reqH))
                 {
                     if (rawSheet == null) continue;
                     int bg0 = rawSheet.GetPixel(0, 0);
-                    int bgCorner = rawSheet.GetPixel(form.Coords[0].X, form.Coords[0].Y);
 
                     if (form.Name == "normal" && trayIcon == null)
                     {
                         ExtractTrayIconFromNormalSheet(rawSheet, bg0, out trayIcon, out trayIconHandle);
                     }
 
-                    SpriteTile[] base4 = new SpriteTile[form.Coords.Length];
-                    for (int i = 0; i < form.Coords.Length; i++)
-                    {
-                        base4[i] = ExtractAlignedTile(rawSheet, form.Coords[i], bg0, bgCorner, scratch);
-                    }
-
-                    // 6-frame ping-pong walk cycle [0, 1, 2, 3, 2, 1] reusing tile references for indices 4 and 5.
-                    form.Frames = new SpriteTile[] { base4[0], base4[1], base4[2], base4[3], base4[2], base4[1] };
-
-                    if (form.GuardCoords != null && form.GuardCoords.Length > 0)
-                    {
-                        form.GuardFrames = new SpriteTile[form.GuardCoords.Length];
-                        for (int i = 0; i < form.GuardCoords.Length; i++)
-                        {
-                            Rectangle gr = form.GuardCoords[i];
-                            if (form.Name == "mirror")
-                            {
-                                form.GuardFrames[i] = ExtractMirrorGuardTile(rawSheet, gr, bg0, scratch);
-                            }
-                            else
-                            {
-                                int gCorner = rawSheet.GetPixel(gr.X, gr.Y);
-                                form.GuardFrames[i] = ExtractAlignedTile(rawSheet, gr, bg0, gCorner, scratch, true);
-                            }
-                        }
-                    }
-
-                    if (form.JumpCoords != null && form.JumpCoords.Length > 0)
-                    {
-                        form.JumpFrames = ExtractJumpTiles(rawSheet, form.JumpCoords, bg0, scratch);
-                    }
-
-                    if (form.StandCoords != null && form.StandCoords.Length > 0)
-                    {
-                        form.StandFrames = new SpriteTile[form.StandCoords.Length];
-                        for (int i = 0; i < form.StandCoords.Length; i++)
-                        {
-                            Rectangle sr = form.StandCoords[i];
-                            int sCorner = rawSheet.GetPixel(sr.X, sr.Y);
-                            form.StandFrames[i] = ExtractAlignedTile(rawSheet, sr, bg0, sCorner, scratch);
-                        }
-                    }
+                    LoadClip(rawSheet, form.Walk, bg0, scratch, true);
+                    LoadClip(rawSheet, form.Guard, bg0, scratch, false);
+                    LoadClip(rawSheet, form.Jump, bg0, scratch, false);
+                    LoadClip(rawSheet, form.Stand, bg0, scratch, false);
                 }
             }
 
@@ -169,10 +130,79 @@ namespace KirbyTaskbarBuddy
                     sleepFrames = new SpriteTile[FormDefinitions.SleepCoords.Length];
                     for (int i = 0; i < FormDefinitions.SleepCoords.Length; i++)
                     {
-                        sleepFrames[i] = ExtractSleepTile(sleepSheet, FormDefinitions.SleepCoords[i], bg0, scratch);
+                        Rectangle sr = FormDefinitions.SleepCoords[i];
+                        int sCorner = sleepSheet.GetPixel(sr.X, sr.Y);
+                        sleepFrames[i] = ExtractCustomPivotTile(sleepSheet, sr, bg0, sCorner, 18, -1, scratch);
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// Extracts all unique <see cref="AnimClip.SourceRects"/> into <see cref="AnimClip.RawFrames"/> according to
+        /// <see cref="AnimClip.Pivot"/>, and builds the playback <see cref="AnimClip.Frames"/> array (reusing tile
+        /// references when an index <see cref="AnimClip.Sequence"/> such as a ping-pong loop is defined).
+        /// </summary>
+        internal static void LoadClip(FastSheet rawSheet, AnimClip clip, int bg0, int[] scratch, bool useFirstRectCorner = false)
+        {
+            if (rawSheet == null || clip == null || clip.SourceRects == null || clip.SourceRects.Length == 0) return;
+
+            Rectangle[] rects = clip.SourceRects;
+            if (clip.Pivot == PivotMode.JumpArc)
+            {
+                clip.RawFrames = ExtractJumpTiles(rawSheet, rects, bg0, scratch);
+            }
+            else
+            {
+                clip.RawFrames = new SpriteTile[rects.Length];
+                int firstCorner = rawSheet.GetPixel(rects[0].X, rects[0].Y);
+                for (int i = 0; i < rects.Length; i++)
+                {
+                    Rectangle r = rects[i];
+                    int bgCorner = useFirstRectCorner ? firstCorner : rawSheet.GetPixel(r.X, r.Y);
+                    switch (clip.Pivot)
+                    {
+                        case PivotMode.MirrorGuard:
+                            clip.RawFrames[i] = ExtractMirrorGuardTile(rawSheet, r, bg0, scratch);
+                            break;
+                        case PivotMode.GuardBottom2Rows:
+                            clip.RawFrames[i] = ExtractAlignedTile(rawSheet, r, bg0, bgCorner, scratch, true);
+                            break;
+                        case PivotMode.Center:
+                            clip.RawFrames[i] = ExtractCenteredTile(rawSheet, r, bg0, bgCorner, scratch);
+                            break;
+                        case PivotMode.CustomPivot:
+                            clip.RawFrames[i] = ExtractCustomPivotTile(rawSheet, r, bg0, bgCorner, clip.CustomPivotX, clip.CustomPivotY, scratch);
+                            break;
+                        case PivotMode.FeetBottom4Rows:
+                        default:
+                            clip.RawFrames[i] = ExtractAlignedTile(rawSheet, r, bg0, bgCorner, scratch, false);
+                            break;
+                    }
+                }
+            }
+
+            if (clip.Sequence != null && clip.Sequence.Length > 0 && clip.RawFrames != null)
+            {
+                clip.Frames = new SpriteTile[clip.Sequence.Length];
+                for (int i = 0; i < clip.Sequence.Length; i++)
+                {
+                    int idx = clip.Sequence[i];
+                    if (idx >= 0 && idx < clip.RawFrames.Length)
+                    {
+                        clip.Frames[i] = clip.RawFrames[idx];
+                    }
+                }
+            }
+            else
+            {
+                clip.Frames = clip.RawFrames;
+            }
+        }
+
+        private static void ExpandBounds(AnimClip clip, ref int maxW, ref int maxH)
+        {
+            if (clip != null) ExpandBounds(clip.SourceRects, ref maxW, ref maxH);
         }
 
         private static void ExpandBounds(Rectangle[] rects, ref int maxW, ref int maxH)
@@ -476,11 +506,42 @@ namespace KirbyTaskbarBuddy
             return tiles;
         }
 
-        private static SpriteTile ExtractSleepTile(FastSheet rawSheet, Rectangle r, int bg0, int[] scratch)
+        /// <summary>
+        /// Extracts a sprite frame and centers its non-background bounding box on <c>(PIVOT_X, PIVOT_Y)</c>
+        /// (used for projectiles or floating/flying characters with <see cref="PivotMode.Center"/>).
+        /// </summary>
+        private static SpriteTile ExtractCenteredTile(FastSheet rawSheet, Rectangle r, int bg0, int bgCorner, int[] scratch)
         {
-            int bgCorner = rawSheet.GetPixel(r.X, r.Y);
-            int destX = NativeMethods.PIVOT_X - 18;
-            int destY = NativeMethods.PIVOT_Y - (r.Height - 1);
+            int minX = r.Width, maxX = -1, minY = r.Height, maxY = -1;
+            for (int dy = 0; dy < r.Height; dy++)
+            {
+                for (int dx = 0; dx < r.Width; dx++)
+                {
+                    int c = rawSheet.GetPixel(r.X + dx, r.Y + dy);
+                    if (!IsBgColor(c, bg0, bgCorner))
+                    {
+                        if (dx < minX) minX = dx;
+                        if (dx > maxX) maxX = dx;
+                        if (dy < minY) minY = dy;
+                        if (dy > maxY) maxY = dy;
+                    }
+                }
+            }
+
+            int centerX = (minX <= maxX) ? (minX + maxX) / 2 : r.Width / 2;
+            int centerY = (minY <= maxY) ? (minY + maxY) / 2 : r.Height / 2;
+            return ExtractCustomPivotTile(rawSheet, r, bg0, bgCorner, centerX, centerY, scratch);
+        }
+
+        /// <summary>
+        /// Extracts a sprite frame aligned to an explicit <c>(pivotX, pivotY)</c> coordinate within the source rectangle.
+        /// When <paramref name="pivotY"/> is negative, aligns the bottom edge of the rectangle (<c>r.Height - 1</c>) to <c>PIVOT_Y</c>.
+        /// </summary>
+        private static SpriteTile ExtractCustomPivotTile(FastSheet rawSheet, Rectangle r, int bg0, int bgCorner, int pivotX, int pivotY, int[] scratch)
+        {
+            int actualPivotY = (pivotY < 0) ? (r.Height - 1) : pivotY;
+            int destX = NativeMethods.PIVOT_X - pivotX;
+            int destY = NativeMethods.PIVOT_Y - actualPivotY;
 
             Array.Clear(scratch, 0, scratch.Length);
             for (int dy = 0; dy < r.Height; dy++)

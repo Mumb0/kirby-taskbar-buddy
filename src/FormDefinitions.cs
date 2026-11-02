@@ -18,8 +18,74 @@ namespace KirbyTaskbarBuddy
     }
 
     /// <summary>
-    /// Defines a Kirby copy ability, its trigger key, its source spritesheet rectangles,
-    /// and its extracted runtime <see cref="SpriteTile"/> animation arrays.
+    /// Controls how <see cref="SpriteLoader"/> aligns extracted spritesheet frames onto the 80x80 logical canvas.
+    /// </summary>
+    public enum PivotMode
+    {
+        /// <summary>
+        /// Aligns the lowest non-background pixel row to <c>PIVOT_Y</c> and centers horizontally using
+        /// only the bottom 4 rows so tall hats or raised weapons do not shift the character's body.
+        /// </summary>
+        FeetBottom4Rows,
+
+        /// <summary>
+        /// Aligns the lowest non-background pixel row to <c>PIVOT_Y</c> and restricts the left-edge scan
+        /// to the bottom 2 rows for defensive guard stances.
+        /// </summary>
+        GuardBottom2Rows,
+
+        /// <summary>
+        /// Aligns all frames to Frame 0's bottom edge and scans the top rows on somersault frames (indices 1 and 2).
+        /// </summary>
+        JumpArc,
+
+        /// <summary>
+        /// Composites Mirror Kirby's guarding body, outer reflective sphere rim, and scrolling rainbow gradient.
+        /// </summary>
+        MirrorGuard,
+
+        /// <summary>
+        /// Centers the non-background sprite bounds horizontally and vertically on <c>(PIVOT_X, PIVOT_Y)</c>
+        /// (useful for projectiles or floating/flying characters).
+        /// </summary>
+        Center,
+
+        /// <summary>
+        /// Aligns an explicit pixel coordinate <c>(CustomPivotX, CustomPivotY)</c> within each frame to <c>(PIVOT_X, PIVOT_Y)</c>.
+        /// When <c>CustomPivotY &lt; 0</c>, aligns the bottom row of the source rectangle (<c>Height - 1</c>) to <c>PIVOT_Y</c>.
+        /// </summary>
+        CustomPivot
+    }
+
+    /// <summary>
+    /// Self-contained definition and runtime tile storage for a single sprite animation clip
+    /// (such as Walk, Guard, Jump, Stand, Sleep, or future Attack and Enemy/Helper animations).
+    /// </summary>
+    public sealed class AnimClip
+    {
+        public Rectangle[] SourceRects;
+        public int[] Sequence;
+        public double Speed;
+        public bool Loop;
+        public PivotMode Pivot;
+        public int CustomPivotX;
+        public int CustomPivotY;
+
+        // Unique extracted tiles corresponding 1:1 with SourceRects:
+        public SpriteTile[] RawFrames;
+
+        // Playback sequence of tiles (expanded via Sequence if specified, reusing RawFrames references):
+        public SpriteTile[] Frames;
+
+        public bool HasFrames(int minCount = 1)
+        {
+            return Frames != null && Frames.Length >= minCount;
+        }
+    }
+
+    /// <summary>
+    /// Defines a Kirby copy ability, its trigger key, its source spritesheet filename,
+    /// and its <see cref="AnimClip"/> definitions.
     /// </summary>
     public sealed class FormDef
     {
@@ -27,37 +93,33 @@ namespace KirbyTaskbarBuddy
         public string Key;
         public string FileName;
 
-        // Source rectangles within the ability's PNG spritesheet:
-        public Rectangle[] Coords;       // 4 core walk frames (expanded into a 6-frame ping-pong loop)
-        public Rectangle[] GuardCoords;  // Cursor-proximity defensive guard frames
-        public Rectangle[] JumpCoords;   // 5 jump arc frames (launch, somersault 1, somersault 2, early fall, descent)
-        public Rectangle[] StandCoords;  // 2 idle standing/blinking frames (eyes open, eyes closed)
-
-        // Extracted, floor-aligned, premultiplied-ARGB tiles ready for rendering:
-        public SpriteTile[] Frames;
-        public SpriteTile[] GuardFrames;
-        public SpriteTile[] JumpFrames;
-        public SpriteTile[] StandFrames;
+        public AnimClip Walk;
+        public AnimClip Guard;
+        public AnimClip Jump;
+        public AnimClip Stand;
     }
 
     /// <summary>
-    /// Catalog of spritesheet coordinates and frame index sequences for all 19 copy abilities and sleep animations.
+    /// Catalog of spritesheet coordinates, builder helpers, and frame sequences for all 19 copy abilities and sleep animations.
     /// </summary>
     public static class FormDefinitions
     {
+        // Standard 6-frame ping-pong walk sequence expanding 4 source walk frames into [0, 1, 2, 3, 2, 1]:
+        public static readonly int[] WalkPingPongSeq = new int[] { 0, 1, 2, 3, 2, 1 };
+
         /// <summary>
         /// Source rectangles in <c>kirby-sleep.png</c> for nodding off, breathing in sleep, and startled wake-up.
         /// </summary>
         public static readonly Rectangle[] SleepCoords = new Rectangle[]
         {
-            new Rectangle(4, 6, 30, 28),   // 0: Falling asleep (eyes closed)
-            new Rectangle(36, 6, 30, 28),  // 1: Falling asleep (eyes open)
-            new Rectangle(68, 12, 30, 22), // 2: Sleeping 1 (inhale peak)
-            new Rectangle(99, 12, 30, 22), // 3: Sleeping 2
-            new Rectangle(130, 13, 30, 21),// 4: Sleeping 3
-            new Rectangle(162, 14, 30, 20),// 5: Sleeping 4 (exhale low)
-            new Rectangle(194, 6, 30, 28), // 6: Waking up (eyes closed)
-            new Rectangle(226, 6, 30, 28)  // 7: Waking up (eyes open)
+            R(4, 6, 30, 28),   // 0: Falling asleep (eyes closed)
+            R(36, 6, 30, 28),  // 1: Falling asleep (eyes open)
+            R(68, 12, 30, 22), // 2: Sleeping 1 (inhale peak)
+            R(99, 12, 30, 22), // 3: Sleeping 2
+            R(130, 13, 30, 21),// 4: Sleeping 3
+            R(162, 14, 30, 20),// 5: Sleeping 4 (exhale low)
+            R(194, 6, 30, 28), // 6: Waking up (eyes closed)
+            R(226, 6, 30, 28)  // 7: Waking up (eyes open)
         };
 
         // Frame index sequences driving the multi-stage sleep/wake transition animations:
@@ -68,281 +130,217 @@ namespace KirbyTaskbarBuddy
         public static readonly int[] PostWakeStandSeq = new int[] { 0, 1, 0 };                  // Brief blink in current ability before walking
 
         /// <summary>
-        /// Registers all 19 Kirby copy abilities and their spritesheet frame coordinates.
+        /// Shorthand builder for a single spritesheet <see cref="Rectangle"/>.
+        /// </summary>
+        public static Rectangle R(int x, int y, int w, int h)
+        {
+            return new Rectangle(x, y, w, h);
+        }
+
+        /// <summary>
+        /// Builds an array of spritesheet rectangles sharing the same <paramref name="y"/>, <paramref name="w"/>,
+        /// and <paramref name="h"/> across arbitrary horizontal X coordinates.
+        /// </summary>
+        public static Rectangle[] Row(int y, int w, int h, params int[] xs)
+        {
+            Rectangle[] rects = new Rectangle[xs.Length];
+            for (int i = 0; i < xs.Length; i++)
+            {
+                rects[i] = new Rectangle(xs[i], y, w, h);
+            }
+            return rects;
+        }
+
+        /// <summary>
+        /// Builds an array of evenly-spaced spritesheet rectangles stepping by <paramref name="stepX"/> and <paramref name="stepY"/>.
+        /// </summary>
+        public static Rectangle[] Strip(int startX, int startY, int w, int h, int count, int stepX, int stepY = 0)
+        {
+            Rectangle[] rects = new Rectangle[count];
+            for (int i = 0; i < count; i++)
+            {
+                rects[i] = new Rectangle(startX + i * stepX, startY + i * stepY, w, h);
+            }
+            return rects;
+        }
+
+        /// <summary>
+        /// General-purpose builder for custom <see cref="AnimClip"/> definitions (attacks, projectiles, enemies, helpers).
+        /// </summary>
+        public static AnimClip Clip(
+            Rectangle[] rects,
+            double speed,
+            bool loop,
+            PivotMode pivot = PivotMode.FeetBottom4Rows,
+            int[] sequence = null,
+            int customPivotX = 0,
+            int customPivotY = -1)
+        {
+            return new AnimClip
+            {
+                SourceRects = rects,
+                Sequence = sequence,
+                Speed = speed,
+                Loop = loop,
+                Pivot = pivot,
+                CustomPivotX = customPivotX,
+                CustomPivotY = customPivotY
+            };
+        }
+
+        public static AnimClip WalkClip(params Rectangle[] rects)
+        {
+            return Clip(rects, 0.1, true, PivotMode.FeetBottom4Rows, WalkPingPongSeq);
+        }
+
+        public static AnimClip GuardClip(params Rectangle[] rects)
+        {
+            return Clip(rects, 0.25, true, PivotMode.GuardBottom2Rows);
+        }
+
+        public static AnimClip MirrorGuardClip(params Rectangle[] rects)
+        {
+            return Clip(rects, 0.25, true, PivotMode.MirrorGuard);
+        }
+
+        public static AnimClip JumpClip(params Rectangle[] rects)
+        {
+            return Clip(rects, 0.0, false, PivotMode.JumpArc);
+        }
+
+        public static AnimClip StandClip(params Rectangle[] rects)
+        {
+            return Clip(rects, 0.05, false, PivotMode.FeetBottom4Rows);
+        }
+
+        /// <summary>
+        /// Registers all 19 Kirby copy abilities and their spritesheet animation clips.
         /// </summary>
         public static void PopulateForms(List<FormDef> forms, Dictionary<string, FormDef> keyToForm, out FormDef normalForm)
         {
             normalForm = null;
 
-            AddForm(forms, keyToForm, ref normalForm, "normal", "0", "kirby-normal.png", new[] {
-                new Rectangle(32, 125, 24, 24), new Rectangle(60, 125, 24, 24),
-                new Rectangle(87, 125, 24, 24), new Rectangle(114, 125, 24, 24)
-            }, new[] {
-                new Rectangle(79, 263, 26, 25), new Rectangle(108, 263, 26, 25)
-            }, new[] {
-                new Rectangle(66, 193, 23, 24), new Rectangle(94, 193, 23, 23),
-                new Rectangle(122, 194, 21, 22), new Rectangle(147, 193, 24, 23),
-                new Rectangle(176, 193, 23, 24)
-            }, new[] {
-                new Rectangle(113, 55, 24, 23), new Rectangle(142, 55, 24, 23)
-            });
+            AddForm(forms, keyToForm, ref normalForm, "normal", "0", "kirby-normal.png",
+                WalkClip(Row(125, 24, 24, 32, 60, 87, 114)),
+                GuardClip(Row(263, 26, 25, 79, 108)),
+                JumpClip(R(66, 193, 23, 24), R(94, 193, 23, 23), R(122, 194, 21, 22), R(147, 193, 24, 23), R(176, 193, 23, 24)),
+                StandClip(Row(55, 24, 23, 113, 142)));
 
-            AddForm(forms, keyToForm, ref normalForm, "ice", "l", "kirby-ice.png", new[] {
-                new Rectangle(6, 213, 24, 34), new Rectangle(35, 213, 24, 34),
-                new Rectangle(63, 213, 24, 34), new Rectangle(92, 213, 24, 34)
-            }, new[] {
-                new Rectangle(42, 605, 34, 26), new Rectangle(42, 642, 34, 26),
-                new Rectangle(42, 679, 34, 26)
-            }, new[] {
-                new Rectangle(6, 372, 24, 33), new Rectangle(35, 381, 26, 24),
-                new Rectangle(66, 381, 26, 27), new Rectangle(97, 372, 25, 32),
-                new Rectangle(127, 365, 23, 40)
-            }, new[] {
-                new Rectangle(35, 84, 24, 32), new Rectangle(64, 84, 24, 32)
-            });
+            AddForm(forms, keyToForm, ref normalForm, "ice", "l", "kirby-ice.png",
+                WalkClip(Row(213, 24, 34, 6, 35, 63, 92)),
+                GuardClip(Strip(42, 605, 34, 26, 3, 0, 37)),
+                JumpClip(R(6, 372, 24, 33), R(35, 381, 26, 24), R(66, 381, 26, 27), R(97, 372, 25, 32), R(127, 365, 23, 40)),
+                StandClip(Row(84, 24, 32, 35, 64)));
 
-            AddForm(forms, keyToForm, ref normalForm, "bomb", "b", "kirby-bomb.png", new[] {
-                new Rectangle(0, 101, 31, 29), new Rectangle(32, 101, 32, 29),
-                new Rectangle(68, 101, 32, 29), new Rectangle(98, 101, 32, 29)
-            }, new[] {
-                new Rectangle(304, 103, 32, 28), new Rectangle(339, 103, 32, 28)
-            }, new[] {
-                new Rectangle(6, 174, 27, 30), new Rectangle(38, 180, 23, 23),
-                new Rectangle(66, 180, 21, 27), new Rectangle(92, 178, 28, 25),
-                new Rectangle(125, 168, 23, 36)
-            }, new[] {
-                new Rectangle(40, 34, 29, 28), new Rectangle(74, 34, 29, 28)
-            });
+            AddForm(forms, keyToForm, ref normalForm, "bomb", "b", "kirby-bomb.png",
+                WalkClip(R(0, 101, 31, 29), R(32, 101, 32, 29), R(68, 101, 32, 29), R(98, 101, 32, 29)),
+                GuardClip(Row(103, 32, 28, 304, 339)),
+                JumpClip(R(6, 174, 27, 30), R(38, 180, 23, 23), R(66, 180, 21, 27), R(92, 178, 28, 25), R(125, 168, 23, 36)),
+                StandClip(Row(34, 29, 28, 40, 74)));
 
-            AddForm(forms, keyToForm, ref normalForm, "beam", "e", "kirby-beam.png", new[] {
-                new Rectangle(5, 101, 27, 37), new Rectangle(35, 101, 27, 37),
-                new Rectangle(65, 101, 27, 37), new Rectangle(96, 101, 27, 37)
-            }, new[] {
-                new Rectangle(5, 348, 31, 27), new Rectangle(39, 348, 31, 27)
-            }, new[] {
-                new Rectangle(6, 193, 26, 30), new Rectangle(37, 199, 27, 24),
-                new Rectangle(69, 199, 23, 29), new Rectangle(97, 191, 28, 31),
-                new Rectangle(130, 184, 24, 39)
-            }, new[] {
-                new Rectangle(37, 29, 26, 31), new Rectangle(68, 29, 26, 31)
-            });
+            AddForm(forms, keyToForm, ref normalForm, "beam", "e", "kirby-beam.png",
+                WalkClip(Row(101, 27, 37, 5, 35, 65, 96)),
+                GuardClip(Row(348, 31, 27, 5, 39)),
+                JumpClip(R(6, 193, 26, 30), R(37, 199, 27, 24), R(69, 199, 23, 29), R(97, 191, 28, 31), R(130, 184, 24, 39)),
+                StandClip(Row(29, 26, 31, 37, 68)));
 
-            AddForm(forms, keyToForm, ref normalForm, "cutter", "c", "kirby-cutter.png", new[] {
-                new Rectangle(4, 126, 29, 35), new Rectangle(34, 126, 29, 35),
-                new Rectangle(66, 126, 29, 35), new Rectangle(100, 126, 29, 35)
-            }, new[] {
-                new Rectangle(5, 413, 28, 30), new Rectangle(36, 413, 28, 30)
-            }, new[] {
-                new Rectangle(6, 214, 23, 37), new Rectangle(34, 227, 23, 28),
-                new Rectangle(62, 227, 23, 33), new Rectangle(90, 221, 27, 29),
-                new Rectangle(122, 216, 24, 35)
-            }, new[] {
-                new Rectangle(35, 34, 24, 34), new Rectangle(64, 34, 24, 34)
-            });
+            AddForm(forms, keyToForm, ref normalForm, "cutter", "c", "kirby-cutter.png",
+                WalkClip(Row(126, 29, 35, 4, 34, 66, 100)),
+                GuardClip(Row(413, 28, 30, 5, 36)),
+                JumpClip(R(6, 214, 23, 37), R(34, 227, 23, 28), R(62, 227, 23, 33), R(90, 221, 27, 29), R(122, 216, 24, 35)),
+                StandClip(Row(34, 24, 34, 35, 64)));
 
-            AddForm(forms, keyToForm, ref normalForm, "fighter", "f", "kirby-fighter.png", new[] {
-                new Rectangle(6, 95, 26, 24), new Rectangle(36, 95, 26, 24),
-                new Rectangle(66, 95, 26, 24), new Rectangle(96, 95, 26, 24)
-            }, new[] {
-                new Rectangle(5, 333, 29, 25), new Rectangle(37, 333, 29, 25)
-            }, new[] {
-                new Rectangle(6, 176, 25, 24), new Rectangle(36, 171, 23, 28),
-                new Rectangle(64, 175, 21, 23), new Rectangle(90, 176, 26, 23),
-                new Rectangle(121, 169, 23, 31)
-            }, new[] {
-                new Rectangle(35, 27, 24, 23), new Rectangle(64, 27, 24, 23)
-            });
+            AddForm(forms, keyToForm, ref normalForm, "fighter", "f", "kirby-fighter.png",
+                WalkClip(Strip(6, 95, 26, 24, 4, 30)),
+                GuardClip(Row(333, 29, 25, 5, 37)),
+                JumpClip(R(6, 176, 25, 24), R(36, 171, 23, 28), R(64, 175, 21, 23), R(90, 176, 26, 23), R(121, 169, 23, 31)),
+                StandClip(Row(27, 24, 23, 35, 64)));
 
-            AddForm(forms, keyToForm, ref normalForm, "fire", "d", "kirby-fire.png", new[] {
-                new Rectangle(6, 309, 24, 34), new Rectangle(35, 309, 24, 34),
-                new Rectangle(63, 309, 24, 34), new Rectangle(92, 309, 24, 34)
-            }, new[] {
-                new Rectangle(5, 941, 28, 31), new Rectangle(36, 941, 28, 31)
-            }, new[] {
-                new Rectangle(6, 529, 24, 33), new Rectangle(35, 538, 26, 24),
-                new Rectangle(66, 538, 26, 27), new Rectangle(97, 529, 25, 32),
-                new Rectangle(127, 522, 23, 40)
-            }, new[] {
-                new Rectangle(35, 134, 24, 32), new Rectangle(64, 134, 24, 32)
-            });
+            AddForm(forms, keyToForm, ref normalForm, "fire", "d", "kirby-fire.png",
+                WalkClip(Row(309, 24, 34, 6, 35, 63, 92)),
+                GuardClip(Row(941, 28, 31, 5, 36)),
+                JumpClip(R(6, 529, 24, 33), R(35, 538, 26, 24), R(66, 538, 26, 27), R(97, 529, 25, 32), R(127, 522, 23, 40)),
+                StandClip(Row(134, 24, 32, 35, 64)));
 
-            AddForm(forms, keyToForm, ref normalForm, "hammer", "h", "kirby-hammer.png", new[] {
-                new Rectangle(5, 164, 44, 49), new Rectangle(52, 164, 44, 49),
-                new Rectangle(99, 164, 44, 49), new Rectangle(146, 164, 44, 49)
-            }, new[] {
-                new Rectangle(5, 426, 29, 34), new Rectangle(37, 426, 29, 34)
-            }, new[] {
-                new Rectangle(8, 240, 42, 43), new Rectangle(82, 258, 31, 42),
-                new Rectangle(132, 259, 27, 45), new Rectangle(174, 239, 44, 42),
-                new Rectangle(236, 234, 37, 47)
-            }, new[] {
-                new Rectangle(53, 100, 36, 40), new Rectangle(94, 100, 36, 40)
-            });
+            AddForm(forms, keyToForm, ref normalForm, "hammer", "h", "kirby-hammer.png",
+                WalkClip(Strip(5, 164, 44, 49, 4, 47)),
+                GuardClip(Row(426, 29, 34, 5, 37)),
+                JumpClip(R(8, 240, 42, 43), R(82, 258, 31, 42), R(132, 259, 27, 45), R(174, 239, 44, 42), R(236, 234, 37, 47)),
+                StandClip(Row(100, 36, 40, 53, 94)));
 
-            AddForm(forms, keyToForm, ref normalForm, "jet", "j", "kirby-jet.png", new[] {
-                new Rectangle(6, 114, 28, 29), new Rectangle(39, 114, 28, 29),
-                new Rectangle(70, 114, 28, 29), new Rectangle(101, 114, 28, 29)
-            }, new[] {
-                new Rectangle(5, 283, 30, 28), new Rectangle(38, 283, 30, 28)
-            }, new[] {
-                new Rectangle(6, 195, 26, 29), new Rectangle(37, 200, 24, 23),
-                new Rectangle(66, 200, 26, 24), new Rectangle(97, 197, 27, 26),
-                new Rectangle(129, 193, 25, 31)
-            }, new[] {
-                new Rectangle(40, 32, 29, 28), new Rectangle(74, 32, 29, 28)
-            });
+            AddForm(forms, keyToForm, ref normalForm, "jet", "j", "kirby-jet.png",
+                WalkClip(Row(114, 28, 29, 6, 39, 70, 101)),
+                GuardClip(Row(283, 30, 28, 5, 38)),
+                JumpClip(R(6, 195, 26, 29), R(37, 200, 24, 23), R(66, 200, 26, 24), R(97, 197, 27, 26), R(129, 193, 25, 31)),
+                StandClip(Row(32, 29, 28, 40, 74)));
 
             // Mirror Kirby's guard uses a 15-frame scrolling rainbow palette animation
-            // composited inside a reflective sphere (handled specially in SpriteLoader.ExtractMirrorGuardTile).
-            AddForm(forms, keyToForm, ref normalForm, "mirror", "m", "kirby-mirror.png", new[] {
-                new Rectangle(5, 117, 27, 37), new Rectangle(35, 117, 27, 37),
-                new Rectangle(65, 117, 27, 37), new Rectangle(96, 117, 27, 37)
-            }, new[] {
-                new Rectangle(220, 877, 32, 34), new Rectangle(255, 877, 32, 34),
-                new Rectangle(290, 877, 32, 34), new Rectangle(325, 877, 32, 34),
-                new Rectangle(360, 877, 32, 34), new Rectangle(395, 877, 32, 34),
-                new Rectangle(430, 877, 32, 34), new Rectangle(465, 877, 32, 34),
-                new Rectangle(500, 877, 32, 34), new Rectangle(535, 877, 32, 34),
-                new Rectangle(570, 877, 32, 34), new Rectangle(605, 877, 32, 34),
-                new Rectangle(640, 877, 32, 34), new Rectangle(675, 877, 32, 34),
-                new Rectangle(710, 877, 32, 34)
-            }, new[] {
-                new Rectangle(6, 272, 26, 30), new Rectangle(37, 278, 27, 24),
-                new Rectangle(69, 278, 23, 29), new Rectangle(97, 270, 28, 31),
-                new Rectangle(130, 263, 24, 39)
-            }, new[] {
-                new Rectangle(37, 44, 26, 31), new Rectangle(68, 44, 26, 31)
-            });
+            // composited inside a reflective sphere (handled via PivotMode.MirrorGuard in SpriteLoader).
+            AddForm(forms, keyToForm, ref normalForm, "mirror", "m", "kirby-mirror.png",
+                WalkClip(Row(117, 27, 37, 5, 35, 65, 96)),
+                MirrorGuardClip(Strip(220, 877, 32, 34, 15, 35)),
+                JumpClip(R(6, 272, 26, 30), R(37, 278, 27, 24), R(69, 278, 23, 29), R(97, 270, 28, 31), R(130, 263, 24, 39)),
+                StandClip(Row(44, 26, 31, 37, 68)));
 
-            AddForm(forms, keyToForm, ref normalForm, "ninja", "n", "kirby-ninja.png", new[] {
-                new Rectangle(207, 45, 27, 32), new Rectangle(235, 45, 27, 32),
-                new Rectangle(264, 45, 27, 32), new Rectangle(296, 45, 27, 32)
-            }, new[] {
-                new Rectangle(5, 234, 28, 26), new Rectangle(36, 234, 28, 26)
-            }, new[] {
-                new Rectangle(6, 136, 23, 33), new Rectangle(34, 145, 23, 24),
-                new Rectangle(62, 145, 21, 31), new Rectangle(90, 141, 24, 27),
-                new Rectangle(119, 130, 23, 39)
-            }, new[] {
-                new Rectangle(35, 43, 24, 30), new Rectangle(64, 43, 24, 30)
-            });
+            AddForm(forms, keyToForm, ref normalForm, "ninja", "n", "kirby-ninja.png",
+                WalkClip(Row(45, 27, 32, 207, 235, 264, 296)),
+                GuardClip(Row(234, 28, 26, 5, 36)),
+                JumpClip(R(6, 136, 23, 33), R(34, 145, 23, 24), R(62, 145, 21, 31), R(90, 141, 24, 27), R(119, 130, 23, 39)),
+                StandClip(Row(43, 24, 30, 35, 64)));
 
-            AddForm(forms, keyToForm, ref normalForm, "paint", "p", "kirby-paint.png", new[] {
-                new Rectangle(5, 113, 26, 28), new Rectangle(34, 113, 26, 28),
-                new Rectangle(62, 113, 26, 28), new Rectangle(92, 113, 26, 28)
-            }, new[] {
-                new Rectangle(181, 196, 26, 25), new Rectangle(210, 196, 26, 25)
-            }, new[] {
-                new Rectangle(6, 195, 24, 28), new Rectangle(35, 198, 23, 24),
-                new Rectangle(63, 199, 22, 25), new Rectangle(90, 196, 24, 26),
-                new Rectangle(119, 195, 23, 28)
-            }, new[] {
-                new Rectangle(35, 29, 24, 27), new Rectangle(64, 29, 24, 27)
-            });
+            AddForm(forms, keyToForm, ref normalForm, "paint", "p", "kirby-paint.png",
+                WalkClip(Row(113, 26, 28, 5, 34, 62, 92)),
+                GuardClip(Row(196, 26, 25, 181, 210)),
+                JumpClip(R(6, 195, 24, 28), R(35, 198, 23, 24), R(63, 199, 22, 25), R(90, 196, 24, 26), R(119, 195, 23, 28)),
+                StandClip(Row(29, 24, 27, 35, 64)));
 
-            AddForm(forms, keyToForm, ref normalForm, "parasol", "r", "kirby-parasol.png", new[] {
-                new Rectangle(269, 92, 42, 49), new Rectangle(314, 92, 42, 49),
-                new Rectangle(359, 92, 42, 49), new Rectangle(404, 92, 42, 49)
-            }, new[] {
-                new Rectangle(669, 116, 29, 25), new Rectangle(701, 116, 29, 25)
-            }, new[] {
-                new Rectangle(11, 167, 37, 44), new Rectangle(77, 186, 30, 41),
-                new Rectangle(130, 187, 21, 45), new Rectangle(165, 168, 42, 41),
-                new Rectangle(229, 162, 30, 47)
-            }, new[] {
-                new Rectangle(42, 91, 31, 46), new Rectangle(78, 91, 31, 46)
-            });
+            AddForm(forms, keyToForm, ref normalForm, "parasol", "r", "kirby-parasol.png",
+                WalkClip(Strip(269, 92, 42, 49, 4, 45)),
+                GuardClip(Row(116, 29, 25, 669, 701)),
+                JumpClip(R(11, 167, 37, 44), R(77, 186, 30, 41), R(130, 187, 21, 45), R(165, 168, 42, 41), R(229, 162, 30, 47)),
+                StandClip(Row(91, 31, 46, 42, 78)));
 
-            AddForm(forms, keyToForm, ref normalForm, "plasma", "a", "kirby-plasma.png", new[] {
-                new Rectangle(6, 357, 24, 34), new Rectangle(35, 357, 24, 34),
-                new Rectangle(63, 357, 24, 34), new Rectangle(92, 357, 24, 34)
-            }, new[] {
-                new Rectangle(5, 1078, 28, 29), new Rectangle(36, 1078, 28, 29)
-            }, new[] {
-                new Rectangle(6, 608, 24, 33), new Rectangle(35, 617, 26, 24),
-                new Rectangle(66, 617, 26, 27), new Rectangle(97, 608, 25, 32),
-                new Rectangle(127, 601, 23, 40)
-            }, new[] {
-                new Rectangle(35, 159, 24, 32), new Rectangle(64, 159, 24, 32)
-            });
+            AddForm(forms, keyToForm, ref normalForm, "plasma", "a", "kirby-plasma.png",
+                WalkClip(Row(357, 24, 34, 6, 35, 63, 92)),
+                GuardClip(Row(1078, 28, 29, 5, 36)),
+                JumpClip(R(6, 608, 24, 33), R(35, 617, 26, 24), R(66, 617, 26, 27), R(97, 608, 25, 32), R(127, 601, 23, 40)),
+                StandClip(Row(159, 24, 32, 35, 64)));
 
-            AddForm(forms, keyToForm, ref normalForm, "stone", "s", "kirby-stone.png", new[] {
-                new Rectangle(5, 123, 27, 32), new Rectangle(33, 123, 27, 32),
-                new Rectangle(62, 123, 27, 32), new Rectangle(94, 123, 27, 32)
-            }, new[] {
-                new Rectangle(5, 406, 28, 25), new Rectangle(36, 406, 28, 25)
-            }, new[] {
-                new Rectangle(6, 214, 23, 33), new Rectangle(34, 223, 23, 24),
-                new Rectangle(62, 223, 21, 31), new Rectangle(90, 219, 24, 27),
-                new Rectangle(119, 208, 23, 39)
-            }, new[] {
-                new Rectangle(35, 29, 24, 30), new Rectangle(64, 29, 24, 30)
-            });
+            AddForm(forms, keyToForm, ref normalForm, "stone", "s", "kirby-stone.png",
+                WalkClip(Row(123, 27, 32, 5, 33, 62, 94)),
+                GuardClip(Row(406, 28, 25, 5, 36)),
+                JumpClip(R(6, 214, 23, 33), R(34, 223, 23, 24), R(62, 223, 21, 31), R(90, 219, 24, 27), R(119, 208, 23, 39)),
+                StandClip(Row(29, 24, 30, 35, 64)));
 
-            AddForm(forms, keyToForm, ref normalForm, "suplex", "u", "kirby-suplex.png", new[] {
-                new Rectangle(6, 95, 26, 24), new Rectangle(36, 95, 26, 24),
-                new Rectangle(66, 95, 26, 24), new Rectangle(96, 95, 26, 24)
-            }, new[] {
-                new Rectangle(5, 333, 29, 25), new Rectangle(37, 333, 29, 25)
-            }, new[] {
-                new Rectangle(6, 176, 25, 24), new Rectangle(36, 171, 23, 28),
-                new Rectangle(64, 175, 21, 23), new Rectangle(90, 176, 26, 23),
-                new Rectangle(121, 169, 23, 31)
-            }, new[] {
-                new Rectangle(35, 27, 24, 23), new Rectangle(64, 27, 24, 23)
-            });
+            AddForm(forms, keyToForm, ref normalForm, "suplex", "u", "kirby-suplex.png",
+                WalkClip(Strip(6, 95, 26, 24, 4, 30)),
+                GuardClip(Row(333, 29, 25, 5, 37)),
+                JumpClip(R(6, 176, 25, 24), R(36, 171, 23, 28), R(64, 175, 21, 23), R(90, 176, 26, 23), R(121, 169, 23, 31)),
+                StandClip(Row(27, 24, 23, 35, 64)));
 
-            AddForm(forms, keyToForm, ref normalForm, "sword", "w", "kirby-sword.png", new[] {
-                new Rectangle(3, 101, 32, 30), new Rectangle(34, 101, 32, 30),
-                new Rectangle(67, 101, 32, 30), new Rectangle(101, 101, 32, 30)
-            }, new[] {
-                new Rectangle(5, 321, 32, 28), new Rectangle(40, 321, 32, 28)
-            }, new[] {
-                new Rectangle(6, 174, 27, 30), new Rectangle(38, 180, 23, 23),
-                new Rectangle(66, 180, 21, 27), new Rectangle(92, 178, 28, 25),
-                new Rectangle(125, 168, 23, 36)
-            }, new[] {
-                new Rectangle(40, 34, 29, 28), new Rectangle(74, 34, 29, 28)
-            });
+            AddForm(forms, keyToForm, ref normalForm, "sword", "w", "kirby-sword.png",
+                WalkClip(Row(101, 32, 30, 3, 34, 67, 101)),
+                GuardClip(Row(321, 32, 28, 5, 40)),
+                JumpClip(R(6, 174, 27, 30), R(38, 180, 23, 23), R(66, 180, 21, 27), R(92, 178, 28, 25), R(125, 168, 23, 36)),
+                StandClip(Row(34, 29, 28, 40, 74)));
 
-            AddForm(forms, keyToForm, ref normalForm, "wheel", "v", "kirby-wheel.png", new[] {
-                new Rectangle(5, 121, 26, 28), new Rectangle(34, 121, 26, 28),
-                new Rectangle(62, 121, 26, 28), new Rectangle(92, 121, 26, 28)
-            }, new[] {
-                new Rectangle(152, 204, 26, 25), new Rectangle(181, 204, 26, 25)
-            }, new[] {
-                new Rectangle(6, 203, 24, 28), new Rectangle(35, 206, 23, 24),
-                new Rectangle(63, 207, 22, 25), new Rectangle(90, 204, 24, 26),
-                new Rectangle(119, 203, 23, 28)
-            }, new[] {
-                new Rectangle(35, 37, 24, 27), new Rectangle(64, 37, 24, 27)
-            });
+            AddForm(forms, keyToForm, ref normalForm, "wheel", "v", "kirby-wheel.png",
+                WalkClip(Row(121, 26, 28, 5, 34, 62, 92)),
+                GuardClip(Row(204, 26, 25, 152, 181)),
+                JumpClip(R(6, 203, 24, 28), R(35, 206, 23, 24), R(63, 207, 22, 25), R(90, 204, 24, 26), R(119, 203, 23, 28)),
+                StandClip(Row(37, 24, 27, 35, 64)));
 
-            AddForm(forms, keyToForm, ref normalForm, "wing", "g", "kirby-wing.png", new[] {
-                new Rectangle(4, 127, 31, 32), new Rectangle(35, 127, 31, 32),
-                new Rectangle(66, 127, 31, 32), new Rectangle(100, 127, 31, 32)
-            }, new[] {
-                new Rectangle(5, 448, 30, 29), new Rectangle(38, 448, 30, 29)
-            }, new[] {
-                new Rectangle(6, 214, 26, 31), new Rectangle(37, 220, 24, 23),
-                new Rectangle(66, 222, 25, 30), new Rectangle(96, 217, 28, 27),
-                new Rectangle(129, 212, 23, 32)
-            }, new[] {
-                new Rectangle(39, 37, 28, 32), new Rectangle(72, 37, 28, 32)
-            });
+            AddForm(forms, keyToForm, ref normalForm, "wing", "g", "kirby-wing.png",
+                WalkClip(Row(127, 31, 32, 4, 35, 66, 100)),
+                GuardClip(Row(448, 30, 29, 5, 38)),
+                JumpClip(R(6, 214, 26, 31), R(37, 220, 24, 23), R(66, 222, 25, 30), R(96, 217, 28, 27), R(129, 212, 23, 32)),
+                StandClip(Row(37, 28, 32, 39, 72)));
 
-            AddForm(forms, keyToForm, ref normalForm, "yoyo", "y", "kirby-yoyo.png", new[] {
-                new Rectangle(5, 121, 26, 28), new Rectangle(34, 121, 26, 28),
-                new Rectangle(62, 121, 26, 28), new Rectangle(92, 121, 26, 28)
-            }, new[] {
-                new Rectangle(152, 204, 26, 25), new Rectangle(181, 204, 26, 25)
-            }, new[] {
-                new Rectangle(6, 203, 24, 28), new Rectangle(35, 206, 23, 24),
-                new Rectangle(63, 207, 22, 25), new Rectangle(90, 204, 24, 26),
-                new Rectangle(119, 203, 23, 28)
-            }, new[] {
-                new Rectangle(35, 37, 24, 27), new Rectangle(64, 37, 24, 27)
-            });
+            AddForm(forms, keyToForm, ref normalForm, "yoyo", "y", "kirby-yoyo.png",
+                WalkClip(Row(121, 26, 28, 5, 34, 62, 92)),
+                GuardClip(Row(204, 26, 25, 152, 181)),
+                JumpClip(R(6, 203, 24, 28), R(35, 206, 23, 24), R(63, 207, 22, 25), R(90, 204, 24, 26), R(119, 203, 23, 28)),
+                StandClip(Row(37, 24, 27, 35, 64)));
         }
 
         private static void AddForm(
@@ -352,20 +350,20 @@ namespace KirbyTaskbarBuddy
             string name,
             string key,
             string file,
-            Rectangle[] coords,
-            Rectangle[] guardCoords,
-            Rectangle[] jumpCoords,
-            Rectangle[] standCoords)
+            AnimClip walk,
+            AnimClip guard,
+            AnimClip jump,
+            AnimClip stand)
         {
             FormDef def = new FormDef
             {
                 Name = name,
                 Key = key,
                 FileName = file,
-                Coords = coords,
-                GuardCoords = guardCoords,
-                JumpCoords = jumpCoords,
-                StandCoords = standCoords
+                Walk = walk,
+                Guard = guard,
+                Jump = jump,
+                Stand = stand
             };
             forms.Add(def);
             keyToForm[key] = def;

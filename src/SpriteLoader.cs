@@ -33,8 +33,8 @@ namespace KirbyTaskbarBuddy {
         private Stream _stream;
         private Bitmap _bmp;
         private BitmapData _data;
-        private IntPtr _scan0;
-        private int _stride;
+        private readonly IntPtr _scan0;
+        private readonly int _stride;
         public readonly int Width;
         public readonly int Height;
 

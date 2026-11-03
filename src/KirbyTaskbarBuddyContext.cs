@@ -49,21 +49,21 @@ namespace KirbyTaskbarBuddy {
         private int _scale = 2;
         private double _idleSleepSeconds = 300.0;
 
-        private NotifyIcon _trayIcon;
-        private MenuItem _overlayItem;
-        private MenuItem _combatItem;
-        private MenuItem _pauseItem;
-        private MenuItem _startupItem;
-        private MenuItem _scale1xItem;
-        private MenuItem _scale2xItem;
-        private MenuItem _scale3xItem;
-        private MenuItem _scale4xItem;
-        private MenuItem[] _sleepMenuItems;
-        private double[] _sleepTimeoutValues;
+        private readonly NotifyIcon _trayIcon;
+        private readonly MenuItem _overlayItem;
+        private readonly MenuItem _combatItem;
+        private readonly MenuItem _pauseItem;
+        private readonly MenuItem _startupItem;
+        private readonly MenuItem _scale1xItem;
+        private readonly MenuItem _scale2xItem;
+        private readonly MenuItem _scale3xItem;
+        private readonly MenuItem _scale4xItem;
+        private readonly MenuItem[] _sleepMenuItems;
+        private readonly double[] _sleepTimeoutValues;
 
-        private KirbyOverlayWindow _overlay;
-        private Timer _animTimer;
-        private Stopwatch _stopwatch;
+        private readonly KirbyOverlayWindow _overlay;
+        private readonly Timer _animTimer;
+        private readonly Stopwatch _stopwatch;
         private long _lastTickMs;
 
         private readonly List<FormDef> _forms = new List<FormDef>();
@@ -72,7 +72,7 @@ namespace KirbyTaskbarBuddy {
 
         private readonly List<EnemyDef> _enemies = new List<EnemyDef>();
         private readonly Random _rng = new Random();
-        private KirbyOverlayWindow _enemyOverlay;
+        private readonly KirbyOverlayWindow _enemyOverlay;
         private EnemyDef _activeEnemy;
         private double _enemyX;
         private double _enemyAnimTime;
@@ -81,7 +81,7 @@ namespace KirbyTaskbarBuddy {
         private int _lastEnemyRenderedY = int.MinValue;
         private SpriteTile _lastEnemyRenderedTile;
 
-        private SpriteTile[] _sleepFrames;
+        private readonly SpriteTile[] _sleepFrames;
         private SleepState _sleepState = SleepState.Awake;
         private double _sleepAnimTime;
         private long _lastInputMs;
@@ -91,7 +91,7 @@ namespace KirbyTaskbarBuddy {
         private SwallowState _swallowState = SwallowState.None;
         private double _swallowAnimTime;
 
-        private KirbyOverlayWindow _vfxOverlay;
+        private readonly KirbyOverlayWindow _vfxOverlay;
         private AnimClip _activeVfxClip;
         private double _vfxX;
         private double _vfxY;
@@ -117,7 +117,7 @@ namespace KirbyTaskbarBuddy {
         private Rectangle _cachedWorkArea;
         private readonly StringBuilder _classNameSb = new StringBuilder(64);
         private IntPtr _trayIconHandle = IntPtr.Zero;
-        private Icon _loadedTrayIcon;
+        private readonly Icon _loadedTrayIcon;
 
         public KirbyTaskbarBuddyContext() {
             _instance = this;

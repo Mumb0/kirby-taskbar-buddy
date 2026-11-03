@@ -3,14 +3,14 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 
-namespace KirbyTaskbarBuddy
-{
+namespace KirbyTaskbarBuddy {
+
     /// <summary>
     /// Centralizes Win32/GDI P/Invoke declarations, window style constants, shared canvas geometry,
     /// and zero-allocation input/memory helpers.
     /// </summary>
-    internal static class NativeMethods
-    {
+    internal static class NativeMethods {
+
         /// <summary>
         /// Logical unscaled canvas size (80x80 pixels) used to align all sprites.
         /// </summary>
@@ -62,40 +62,44 @@ namespace KirbyTaskbarBuddy
         public delegate IntPtr LowLevelKeyboardProc(int nCode, IntPtr wParam, IntPtr lParam);
 
         [StructLayout(LayoutKind.Sequential)]
-        public struct POINT
-        {
+        public struct POINT {
+
             public int x;
             public int y;
+
         }
 
         [StructLayout(LayoutKind.Sequential)]
-        public struct SIZE
-        {
+        public struct SIZE {
+
             public int cx;
             public int cy;
+
         }
 
         [StructLayout(LayoutKind.Sequential)]
-        public struct RECT
-        {
+        public struct RECT {
+
             public int Left;
             public int Top;
             public int Right;
             public int Bottom;
+
         }
 
         [StructLayout(LayoutKind.Sequential, Pack = 1)]
-        public struct BLENDFUNCTION
-        {
+        public struct BLENDFUNCTION {
+
             public byte BlendOp;
             public byte BlendFlags;
             public byte SourceConstantAlpha;
             public byte AlphaFormat;
+
         }
 
         [StructLayout(LayoutKind.Sequential)]
-        public struct BITMAPINFOHEADER
-        {
+        public struct BITMAPINFOHEADER {
+
             public int biSize;
             public int biWidth;
             public int biHeight;
@@ -107,20 +111,23 @@ namespace KirbyTaskbarBuddy
             public int biYPelsPerMeter;
             public int biClrUsed;
             public int biClrImportant;
+
         }
 
         [StructLayout(LayoutKind.Sequential)]
-        public struct BITMAPINFO
-        {
+        public struct BITMAPINFO {
+
             public BITMAPINFOHEADER bmiHeader;
             public int bmiColors;
+
         }
 
         [StructLayout(LayoutKind.Sequential)]
-        public struct LASTINPUTINFO
-        {
+        public struct LASTINPUTINFO {
+
             public uint cbSize;
             public uint dwTime;
+
         }
 
         [DllImport("user32.dll", ExactSpelling = true, SetLastError = true)]
@@ -189,7 +196,8 @@ namespace KirbyTaskbarBuddy
         public static extern int GetClassName(IntPtr hWnd, StringBuilder lpClassName, int nMaxCount);
 
         [DllImport("user32.dll", SetLastError = true)]
-        public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+        public static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy,
+            uint uFlags);
 
         [DllImport("user32.dll", SetLastError = true)]
         public static extern bool DestroyIcon(IntPtr hIcon);
@@ -208,16 +216,15 @@ namespace KirbyTaskbarBuddy
         public static extern IntPtr GetModuleHandle(string lpModuleName);
 
         [DllImport("kernel32.dll", SetLastError = true)]
-        public static extern bool SetProcessWorkingSetSize(IntPtr hProcess, IntPtr dwMinimumWorkingSetSize, IntPtr dwMaximumWorkingSetSize);
+        public static extern bool SetProcessWorkingSetSize(IntPtr hProcess, IntPtr dwMinimumWorkingSetSize,
+            IntPtr dwMaximumWorkingSetSize);
 
         /// <summary>
         /// Forces garbage collection and instructs Windows to trim unused pages (such as temporary
         /// startup PNG decode buffers) from the process working set.
         /// </summary>
-        public static void TrimMemory()
-        {
-            try
-            {
+        public static void TrimMemory() {
+            try {
                 GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, true);
                 GC.WaitForPendingFinalizers();
                 GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, true);
@@ -230,10 +237,8 @@ namespace KirbyTaskbarBuddy
         /// Maps a Win32 Virtual-Key code to a Kirby ability key string using pre-interned literals.
         /// Returns null for unmapped keys so fast typing allocates zero strings in the keyboard hook.
         /// </summary>
-        public static string VkCodeToName(int vk)
-        {
-            switch (vk)
-            {
+        public static string VkCodeToName(int vk) {
+            switch (vk) {
                 case 0x30:
                 case 0x60: return "0"; // Top-row 0 or Numpad 0 -> Normal Kirby
                 case 0x41: return "a";
@@ -256,8 +261,10 @@ namespace KirbyTaskbarBuddy
                 case 0x57: return "w";
                 case 0x59: return "y";
                 case 0x20: return " "; // Spacebar -> Jump
-                default:   return null;
+                default: return null;
             }
         }
+
     }
+
 }

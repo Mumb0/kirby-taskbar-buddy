@@ -1,36 +1,38 @@
 using System.Collections.Generic;
 using System.Drawing;
 
-namespace KirbyTaskbarBuddy
-{
+namespace KirbyTaskbarBuddy {
+
     /// <summary>
     /// States for Kirby's idle sleep state machine.
     /// Transitions: Awake -> Halting -> FallingAsleep -> Sleeping -> WakingUp -> PostWakeStanding -> Awake.
     /// </summary>
-    public enum SleepState
-    {
+    public enum SleepState {
+
         Awake,
         Halting,
         FallingAsleep,
         Sleeping,
         WakingUp,
         PostWakeStanding
+
     }
 
     /// <summary>
     /// States for Normal Kirby's enemy inhale and swallow sequence.
     /// </summary>
-    public enum SwallowState
-    {
+    public enum SwallowState {
+
         None,
         Inhaling
+
     }
 
     /// <summary>
     /// Controls how <see cref="SpriteLoader"/> aligns extracted spritesheet frames onto the 80x80 logical canvas.
     /// </summary>
-    public enum PivotMode
-    {
+    public enum PivotMode {
+
         /// <summary>
         /// Aligns the lowest non-background pixel row to <c>PIVOT_Y</c> and centers horizontally using
         /// only the bottom 4 rows so tall hats or raised weapons do not shift the character's body.
@@ -70,14 +72,15 @@ namespace KirbyTaskbarBuddy
         /// and flying into Kirby's mouth.
         /// </summary>
         InhaleWind
+
     }
 
     /// <summary>
     /// Self-contained definition and runtime tile storage for a single sprite animation clip
     /// (such as Walk, Guard, Jump, Stand, Sleep, or future Attack and Enemy/Helper animations).
     /// </summary>
-    public sealed class AnimClip
-    {
+    public sealed class AnimClip {
+
         public Rectangle[] SourceRects;
         public int[] Sequence;
         public double Speed;
@@ -92,18 +95,18 @@ namespace KirbyTaskbarBuddy
         // Playback sequence of tiles (expanded via Sequence if specified, reusing RawFrames references):
         public SpriteTile[] Frames;
 
-        public bool HasFrames(int minCount = 1)
-        {
+        public bool HasFrames(int minCount = 1) {
             return Frames != null && Frames.Length >= minCount;
         }
+
     }
 
     /// <summary>
     /// Defines a Kirby copy ability, its trigger key, its source spritesheet filename,
     /// and its <see cref="AnimClip"/> definitions.
     /// </summary>
-    public sealed class FormDef
-    {
+    public sealed class FormDef {
+
         public string Name;
         public string Key;
         public string FileName;
@@ -114,26 +117,28 @@ namespace KirbyTaskbarBuddy
         public AnimClip Stand;
         public AnimClip Inhale;
         public AnimClip InhaleVfx;
+
     }
 
     /// <summary>
     /// Defines an enemy type, its source spritesheet filename, movement speed,
     /// and its <see cref="AnimClip"/> definitions.
     /// </summary>
-    public sealed class EnemyDef
-    {
+    public sealed class EnemyDef {
+
         public string Name;
         public string FileName;
         public double WalkSpeed;
 
         public AnimClip Walk;
+
     }
 
     /// <summary>
     /// Catalog of spritesheet coordinates, builder helpers, and frame sequences for all 19 copy abilities and sleep animations.
     /// </summary>
-    public static class FormDefinitions
-    {
+    public static class FormDefinitions {
+
         // Standard 6-frame ping-pong walk sequence expanding 4 source walk frames into [0, 1, 2, 3, 2, 1]:
         public static readonly int[] WalkPingPongSeq = new int[] { 0, 1, 2, 3, 2, 1 };
 
@@ -142,28 +147,31 @@ namespace KirbyTaskbarBuddy
         /// </summary>
         public static readonly Rectangle[] SleepCoords = new Rectangle[]
         {
-            R(4, 6, 30, 28),   // 0: Falling asleep (eyes closed)
-            R(36, 6, 30, 28),  // 1: Falling asleep (eyes open)
+            R(4, 6, 30, 28), // 0: Falling asleep (eyes closed)
+            R(36, 6, 30, 28), // 1: Falling asleep (eyes open)
             R(68, 12, 30, 22), // 2: Sleeping 1 (inhale peak)
             R(99, 12, 30, 22), // 3: Sleeping 2
-            R(130, 13, 30, 21),// 4: Sleeping 3
-            R(162, 14, 30, 20),// 5: Sleeping 4 (exhale low)
+            R(130, 13, 30, 21), // 4: Sleeping 3
+            R(162, 14, 30, 20), // 5: Sleeping 4 (exhale low)
             R(194, 6, 30, 28), // 6: Waking up (eyes closed)
-            R(226, 6, 30, 28)  // 7: Waking up (eyes open)
+            R(226, 6, 30, 28) // 7: Waking up (eyes open)
         };
 
         // Frame index sequences driving the multi-stage sleep/wake transition animations:
-        public static readonly int[] HaltStandSeq = new int[] { 0, 0, 1, 0, 0, 1, 0 };          // Blink twice in current ability before nodding off
-        public static readonly int[] FallAsleepSeq = new int[] { 1, 1, 0, 1, 1, 0, 1, 1, 0 };   // Heavy eyelids in sleep cap
-        public static readonly int[] SleepLoopSeq = new int[] { 2, 3, 4, 5, 4, 3 };             // Continuous ping-pong breathing loop
-        public static readonly int[] WakeUpSeq = new int[] { 6, 7, 6, 7, 6, 7 };                // Startled wake-up flutter
-        public static readonly int[] PostWakeStandSeq = new int[] { 0, 1, 0 };                  // Brief blink in current ability before walking
+        public static readonly int[]
+            HaltStandSeq = new int[] { 0, 0, 1, 0, 0, 1, 0 }; // Blink twice in current ability before nodding off
+
+        public static readonly int[] FallAsleepSeq = new int[] { 1, 1, 0, 1, 1, 0, 1, 1, 0 }; // Heavy eyelids in sleep cap
+        public static readonly int[] SleepLoopSeq = new int[] { 2, 3, 4, 5, 4, 3 }; // Continuous ping-pong breathing loop
+        public static readonly int[] WakeUpSeq = new int[] { 6, 7, 6, 7, 6, 7 }; // Startled wake-up flutter
+
+        public static readonly int[]
+            PostWakeStandSeq = new int[] { 0, 1, 0 }; // Brief blink in current ability before walking
 
         /// <summary>
         /// Shorthand builder for a single spritesheet <see cref="Rectangle"/>.
         /// </summary>
-        public static Rectangle R(int x, int y, int w, int h)
-        {
+        public static Rectangle R(int x, int y, int w, int h) {
             return new Rectangle(x, y, w, h);
         }
 
@@ -171,26 +179,26 @@ namespace KirbyTaskbarBuddy
         /// Builds an array of spritesheet rectangles sharing the same <paramref name="y"/>, <paramref name="w"/>,
         /// and <paramref name="h"/> across arbitrary horizontal X coordinates.
         /// </summary>
-        public static Rectangle[] Row(int y, int w, int h, params int[] xs)
-        {
+        public static Rectangle[] Row(int y, int w, int h, params int[] xs) {
             Rectangle[] rects = new Rectangle[xs.Length];
-            for (int i = 0; i < xs.Length; i++)
-            {
+
+            for (int i = 0; i < xs.Length; i++) {
                 rects[i] = new Rectangle(xs[i], y, w, h);
             }
+
             return rects;
         }
 
         /// <summary>
         /// Builds an array of evenly-spaced spritesheet rectangles stepping by <paramref name="stepX"/> and <paramref name="stepY"/>.
         /// </summary>
-        public static Rectangle[] Strip(int startX, int startY, int w, int h, int count, int stepX, int stepY = 0)
-        {
+        public static Rectangle[] Strip(int startX, int startY, int w, int h, int count, int stepX, int stepY = 0) {
             Rectangle[] rects = new Rectangle[count];
-            for (int i = 0; i < count; i++)
-            {
+
+            for (int i = 0; i < count; i++) {
                 rects[i] = new Rectangle(startX + i * stepX, startY + i * stepY, w, h);
             }
+
             return rects;
         }
 
@@ -204,8 +212,7 @@ namespace KirbyTaskbarBuddy
             PivotMode pivot = PivotMode.FeetBottom4Rows,
             int[] sequence = null,
             int customPivotX = 0,
-            int customPivotY = -1)
-        {
+            int customPivotY = -1) {
             return new AnimClip
             {
                 SourceRects = rects,
@@ -218,57 +225,50 @@ namespace KirbyTaskbarBuddy
             };
         }
 
-        public static AnimClip WalkClip(params Rectangle[] rects)
-        {
+        public static AnimClip WalkClip(params Rectangle[] rects) {
             return Clip(rects, 0.1, true, PivotMode.FeetBottom4Rows, WalkPingPongSeq);
         }
 
-        public static AnimClip EnemyWalkClip(params Rectangle[] rects)
-        {
+        public static AnimClip EnemyWalkClip(params Rectangle[] rects) {
             return Clip(rects, 0.08, true, PivotMode.FeetBottom4Rows);
         }
 
-        public static AnimClip GuardClip(params Rectangle[] rects)
-        {
+        public static AnimClip GuardClip(params Rectangle[] rects) {
             return Clip(rects, 0.25, true, PivotMode.GuardBottom2Rows);
         }
 
-        public static AnimClip MirrorGuardClip(params Rectangle[] rects)
-        {
+        public static AnimClip MirrorGuardClip(params Rectangle[] rects) {
             return Clip(rects, 0.25, true, PivotMode.MirrorGuard);
         }
 
-        public static AnimClip JumpClip(params Rectangle[] rects)
-        {
+        public static AnimClip JumpClip(params Rectangle[] rects) {
             return Clip(rects, 0.0, false, PivotMode.JumpArc);
         }
 
-        public static AnimClip StandClip(params Rectangle[] rects)
-        {
+        public static AnimClip StandClip(params Rectangle[] rects) {
             return Clip(rects, 0.05, false, PivotMode.FeetBottom4Rows);
         }
 
-        public static AnimClip VfxClip(double speed, bool loop, params Rectangle[] rects)
-        {
+        public static AnimClip VfxClip(double speed, bool loop, params Rectangle[] rects) {
             return Clip(rects, speed, loop, PivotMode.Center);
         }
 
         /// <summary>
         /// Registers all 19 Kirby copy abilities and their spritesheet animation clips.
         /// </summary>
-        public static void PopulateForms(List<FormDef> forms, Dictionary<string, FormDef> keyToForm, out FormDef normalForm)
-        {
+        public static void PopulateForms(List<FormDef> forms, Dictionary<string, FormDef> keyToForm, out FormDef normalForm) {
             normalForm = null;
 
             AddForm(forms, keyToForm, ref normalForm, "normal", "0", "kirby-normal.png",
                 WalkClip(Row(125, 24, 24, 32, 60, 87, 114)),
                 GuardClip(Row(263, 26, 25, 79, 108)),
-                JumpClip(R(66, 193, 23, 24), R(94, 193, 23, 23), R(122, 194, 21, 22), R(147, 193, 24, 23), R(176, 193, 23, 24)),
+                JumpClip(R(66, 193, 23, 24), R(94, 193, 23, 23), R(122, 194, 21, 22), R(147, 193, 24, 23),
+                    R(176, 193, 23, 24)),
                 StandClip(Row(55, 24, 23, 113, 142)));
 
-            if (normalForm != null)
-            {
-                normalForm.Inhale = Clip(new Rectangle[] { R(22, 94, 21, 24), R(48, 86, 21, 32) }, 0.15, false, PivotMode.FeetBottom4Rows);
+            if (normalForm != null) {
+                normalForm.Inhale = Clip(new Rectangle[] { R(22, 94, 21, 24), R(48, 86, 21, 32) }, 0.15, false,
+                    PivotMode.FeetBottom4Rows);
                 normalForm.InhaleVfx = Clip(Strip(48, 86, 21, 32, 10, 0), 0.4, false, PivotMode.InhaleWind);
             }
 
@@ -311,7 +311,8 @@ namespace KirbyTaskbarBuddy
             AddForm(forms, keyToForm, ref normalForm, "hammer", "h", "kirby-hammer.png",
                 WalkClip(Strip(5, 164, 44, 49, 4, 47)),
                 GuardClip(Row(426, 29, 34, 5, 37)),
-                JumpClip(R(8, 240, 42, 43), R(82, 258, 31, 42), R(132, 259, 27, 45), R(174, 239, 44, 42), R(236, 234, 37, 47)),
+                JumpClip(R(8, 240, 42, 43), R(82, 258, 31, 42), R(132, 259, 27, 45), R(174, 239, 44, 42),
+                    R(236, 234, 37, 47)),
                 StandClip(Row(100, 36, 40, 53, 94)));
 
             AddForm(forms, keyToForm, ref normalForm, "jet", "j", "kirby-jet.png",
@@ -343,7 +344,8 @@ namespace KirbyTaskbarBuddy
             AddForm(forms, keyToForm, ref normalForm, "parasol", "r", "kirby-parasol.png",
                 WalkClip(Strip(269, 92, 42, 49, 4, 45)),
                 GuardClip(Row(116, 29, 25, 669, 701)),
-                JumpClip(R(11, 167, 37, 44), R(77, 186, 30, 41), R(130, 187, 21, 45), R(165, 168, 42, 41), R(229, 162, 30, 47)),
+                JumpClip(R(11, 167, 37, 44), R(77, 186, 30, 41), R(130, 187, 21, 45), R(165, 168, 42, 41),
+                    R(229, 162, 30, 47)),
                 StandClip(Row(91, 31, 46, 42, 78)));
 
             AddForm(forms, keyToForm, ref normalForm, "plasma", "a", "kirby-plasma.png",
@@ -392,9 +394,10 @@ namespace KirbyTaskbarBuddy
         /// <summary>
         /// Registers enemy types and their spritesheet animation clips.
         /// </summary>
-        public static void PopulateEnemies(List<EnemyDef> enemies)
-        {
-            if (enemies == null) return;
+        public static void PopulateEnemies(List<EnemyDef> enemies) {
+            if (enemies == null) {
+                return;
+            }
 
             enemies.Add(new EnemyDef
             {
@@ -423,8 +426,7 @@ namespace KirbyTaskbarBuddy
             AnimClip walk,
             AnimClip guard,
             AnimClip jump,
-            AnimClip stand)
-        {
+            AnimClip stand) {
             FormDef def = new FormDef
             {
                 Name = name,
@@ -437,7 +439,12 @@ namespace KirbyTaskbarBuddy
             };
             forms.Add(def);
             keyToForm[key] = def;
-            if (name == "normal") normalForm = def;
+
+            if (name == "normal") {
+                normalForm = def;
+            }
         }
+
     }
+
 }

@@ -3,14 +3,14 @@ using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Windows.Forms;
 
-namespace KirbyTaskbarBuddy
-{
+namespace KirbyTaskbarBuddy {
+
     /// <summary>
     /// Click-through, per-pixel alpha-blended Win32 layered window that renders Kirby on the desktop.
     /// Uses a single persistent GDI DIBSection buffer to avoid allocating Bitmaps or HBITMAPs on the render loop.
     /// </summary>
-    public class KirbyOverlayWindow : Form
-    {
+    public class KirbyOverlayWindow : Form {
+
         private IntPtr _memDc = IntPtr.Zero;
         private IntPtr _hDib = IntPtr.Zero;
         private IntPtr _oldBmp = IntPtr.Zero;
@@ -28,13 +28,11 @@ namespace KirbyTaskbarBuddy
         /// <summary>
         /// Indicates whether the overlay is currently parked off-screen with zero opacity.
         /// </summary>
-        public bool IsCleared
-        {
+        public bool IsCleared {
             get { return _isCleared; }
         }
 
-        public KirbyOverlayWindow()
-        {
+        public KirbyOverlayWindow() {
             FormBorderStyle = FormBorderStyle.None;
             ShowInTaskbar = false;
             TopMost = true;
@@ -42,21 +40,19 @@ namespace KirbyTaskbarBuddy
             Size = new Size(128, 128);
         }
 
-        protected override bool ShowWithoutActivation
-        {
+        protected override bool ShowWithoutActivation {
             get { return true; }
         }
 
-        protected override CreateParams CreateParams
-        {
+        protected override CreateParams CreateParams {
             get
             {
                 CreateParams cp = base.CreateParams;
                 cp.ExStyle |= NativeMethods.WS_EX_LAYERED
-                            | NativeMethods.WS_EX_TRANSPARENT
-                            | NativeMethods.WS_EX_TOPMOST
-                            | NativeMethods.WS_EX_TOOLWINDOW
-                            | NativeMethods.WS_EX_NOACTIVATE;
+                              | NativeMethods.WS_EX_TRANSPARENT
+                              | NativeMethods.WS_EX_TOPMOST
+                              | NativeMethods.WS_EX_TOOLWINDOW
+                              | NativeMethods.WS_EX_NOACTIVATE;
                 return cp;
             }
         }
@@ -64,23 +60,22 @@ namespace KirbyTaskbarBuddy
         /// <summary>
         /// Releases the unmanaged GDI device context and DIBSection bitmap handle.
         /// </summary>
-        private void FreeDib()
-        {
-            if (_memDc != IntPtr.Zero)
-            {
-                if (_oldBmp != IntPtr.Zero)
-                {
+        private void FreeDib() {
+            if (_memDc != IntPtr.Zero) {
+                if (_oldBmp != IntPtr.Zero) {
                     NativeMethods.SelectObject(_memDc, _oldBmp);
                     _oldBmp = IntPtr.Zero;
                 }
-                if (_hDib != IntPtr.Zero)
-                {
+
+                if (_hDib != IntPtr.Zero) {
                     NativeMethods.DeleteObject(_hDib);
                     _hDib = IntPtr.Zero;
                 }
+
                 NativeMethods.DeleteDC(_memDc);
                 _memDc = IntPtr.Zero;
             }
+
             _dibBits = IntPtr.Zero;
             _dibSize = 0;
             _renderedTile = null;
@@ -92,15 +87,16 @@ namespace KirbyTaskbarBuddy
         /// Lazily allocates (or resizes when the user switches between 1x/2x/3x/4x scale) a single
         /// 32-bpp top-down GDI DIBSection whose raw pixel pointer (<see cref="_dibBits"/>) can be written directly.
         /// </summary>
-        private void EnsureDib(int targetSize)
-        {
-            if (_memDc != IntPtr.Zero && _dibSize == targetSize && _dibBits != IntPtr.Zero) return;
+        private void EnsureDib(int targetSize) {
+            if (_memDc != IntPtr.Zero && _dibSize == targetSize && _dibBits != IntPtr.Zero) {
+                return;
+            }
 
             FreeDib();
 
             IntPtr screenDc = NativeMethods.GetDC(IntPtr.Zero);
-            try
-            {
+
+            try {
                 _memDc = NativeMethods.CreateCompatibleDC(screenDc);
                 NativeMethods.BITMAPINFO bmi = new NativeMethods.BITMAPINFO();
                 bmi.bmiHeader.biSize = Marshal.SizeOf(typeof(NativeMethods.BITMAPINFOHEADER));
@@ -112,14 +108,13 @@ namespace KirbyTaskbarBuddy
                 bmi.bmiHeader.biCompression = 0; // BI_RGB
 
                 _hDib = NativeMethods.CreateDIBSection(_memDc, ref bmi, 0, out _dibBits, IntPtr.Zero, 0);
-                if (_hDib != IntPtr.Zero)
-                {
+
+                if (_hDib != IntPtr.Zero) {
                     _oldBmp = NativeMethods.SelectObject(_memDc, _hDib);
                     _dibSize = targetSize;
                 }
             }
-            finally
-            {
+            finally {
                 NativeMethods.ReleaseDC(IntPtr.Zero, screenDc);
             }
         }
@@ -128,27 +123,29 @@ namespace KirbyTaskbarBuddy
         /// Updates the layered window's position and (when the animation frame or scale changes)
         /// nearest-neighbor blits the <see cref="SpriteTile"/> into the persistent DIBSection buffer.
         /// </summary>
-        public void UpdateSpriteFrame(SpriteTile tile, int scale, int screenX, int screenY)
-        {
-            if (IsDisposed || !IsHandleCreated || tile == null) return;
+        public void UpdateSpriteFrame(SpriteTile tile, int scale, int screenX, int screenY) {
+            if (IsDisposed || !IsHandleCreated || tile == null) {
+                return;
+            }
 
             int targetSize = NativeMethods.TILE_SIZE * scale;
             EnsureDib(targetSize);
-            if (_memDc == IntPtr.Zero || _dibBits == IntPtr.Zero) return;
+
+            if (_memDc == IntPtr.Zero || _dibBits == IntPtr.Zero) {
+                return;
+            }
 
             // Only re-rasterize pixels into _dibBits when the displayed sprite tile or scale changes.
-            if (tile != _renderedTile || scale != _renderedScale)
-            {
+            if (tile != _renderedTile || scale != _renderedScale) {
                 // Clear only the bounding box dirtied by the previous frame instead of zeroing the entire canvas.
-                if (!_dirtyRect.IsEmpty)
-                {
+                if (!_dirtyRect.IsEmpty) {
                     int clearRight = Math.Min(targetSize, _dirtyRect.Right);
                     int clearBottom = Math.Min(targetSize, _dirtyRect.Bottom);
-                    for (int y = Math.Max(0, _dirtyRect.Top); y < clearBottom; y++)
-                    {
+
+                    for (int y = Math.Max(0, _dirtyRect.Top); y < clearBottom; y++) {
                         int rowBase = (y * targetSize) << 2;
-                        for (int x = Math.Max(0, _dirtyRect.Left); x < clearRight; x++)
-                        {
+
+                        for (int x = Math.Max(0, _dirtyRect.Left); x < clearRight; x++) {
                             Marshal.WriteInt32(_dibBits, rowBase + (x << 2), 0);
                         }
                     }
@@ -158,20 +155,20 @@ namespace KirbyTaskbarBuddy
                 int startX = tile.MinX * scale;
                 int startY = tile.MinY * scale;
                 int srcIdx = 0;
-                for (int sy = 0; sy < tile.Height; sy++)
-                {
+
+                for (int sy = 0; sy < tile.Height; sy++) {
                     int baseY = startY + sy * scale;
-                    for (int sx = 0; sx < tile.Width; sx++)
-                    {
+
+                    for (int sx = 0; sx < tile.Width; sx++) {
                         int c = tile.PremulPixels[srcIdx++];
-                        if (c != 0)
-                        {
+
+                        if (c != 0) {
                             int baseX = startX + sx * scale;
-                            for (int dy = 0; dy < scale; dy++)
-                            {
+
+                            for (int dy = 0; dy < scale; dy++) {
                                 int rowOffset = ((baseY + dy) * targetSize + baseX) << 2;
-                                for (int dx = 0; dx < scale; dx++)
-                                {
+
+                                for (int dx = 0; dx < scale; dx++) {
                                     Marshal.WriteInt32(_dibBits, rowOffset + (dx << 2), c);
                                 }
                             }
@@ -214,13 +211,17 @@ namespace KirbyTaskbarBuddy
         /// off-screen via <see cref="NativeMethods.UpdateLayeredWindow"/> without toggling <c>WS_VISIBLE</c>
         /// (<c>ShowWindow</c>), avoiding DWM composition / Multiplane Overlay (MPO) mode switches.
         /// </summary>
-        public void ClearOverlay(int scale)
-        {
-            if (IsDisposed || !IsHandleCreated || _isCleared) return;
+        public void ClearOverlay(int scale) {
+            if (IsDisposed || !IsHandleCreated || _isCleared) {
+                return;
+            }
 
             int targetSize = NativeMethods.TILE_SIZE * scale;
             EnsureDib(targetSize);
-            if (_memDc == IntPtr.Zero || _dibBits == IntPtr.Zero) return;
+
+            if (_memDc == IntPtr.Zero || _dibBits == IntPtr.Zero) {
+                return;
+            }
 
             NativeMethods.SIZE size = new NativeMethods.SIZE { cx = targetSize, cy = targetSize };
             NativeMethods.POINT pointSource = new NativeMethods.POINT { x = 0, y = 0 };
@@ -247,10 +248,11 @@ namespace KirbyTaskbarBuddy
             _isCleared = true;
         }
 
-        protected override void Dispose(bool disposing)
-        {
+        protected override void Dispose(bool disposing) {
             FreeDib();
             base.Dispose(disposing);
         }
+
     }
+
 }

@@ -636,7 +636,8 @@ namespace KirbyTaskbarBuddy {
                 return false;
             }
 
-            if (currentForm == null || currentForm.Name != "normal" || currentForm.Inhale == null || !currentForm.Inhale.HasFrames()) {
+            if (currentForm == null || currentForm.Name != "normal" || currentForm.Inhale == null ||
+                !currentForm.Inhale.HasFrames()) {
                 return false;
             }
 
@@ -701,6 +702,7 @@ namespace KirbyTaskbarBuddy {
 
                 if (fg != _lastForegroundWindow) {
                     _lastForegroundWindow = fg;
+
                     if (_overlayEnabled && !_isFullscreenCached) {
                         RefreshTopmostOrder();
                     }
@@ -742,7 +744,8 @@ namespace KirbyTaskbarBuddy {
                 }
 
                 if (_swallowState == SwallowState.None &&
-                    CanStartInhale(_currentForm, _sleepState, _isJumping, _swallowState, _activeEnemy, _kirbyX, _enemyX, _scale)) {
+                    CanStartInhale(_currentForm, _sleepState, _isJumping, _swallowState, _activeEnemy, _kirbyX, _enemyX,
+                        _scale)) {
                     _swallowState = SwallowState.Inhaling;
                     _swallowAnimTime = 0.0;
                     _vfxAnimTime = 0.0;
@@ -957,13 +960,13 @@ namespace KirbyTaskbarBuddy {
             }
 
             return className == "Progman"
-                || className == "WorkerW"
-                || className == "Shell_TrayWnd"
-                || className == "Shell_SecondaryTrayWnd"
-                || className == "Windows.UI.Core.CoreWindow"
-                || className == "XamlExplorerHostIslandWindow"
-                || className == "MultitaskingViewFrame"
-                || className == "ForegroundStaging";
+                   || className == "WorkerW"
+                   || className == "Shell_TrayWnd"
+                   || className == "Shell_SecondaryTrayWnd"
+                   || className == "Windows.UI.Core.CoreWindow"
+                   || className == "XamlExplorerHostIslandWindow"
+                   || className == "MultitaskingViewFrame"
+                   || className == "ForegroundStaging";
         }
 
         /// <summary>
@@ -972,8 +975,8 @@ namespace KirbyTaskbarBuddy {
         /// </summary>
         internal static bool IsNonFullscreenOverlayExStyle(int exStyle) {
             const int ignoreMask = NativeMethods.WS_EX_TRANSPARENT
-                                 | NativeMethods.WS_EX_NOACTIVATE
-                                 | NativeMethods.WS_EX_TOOLWINDOW;
+                                   | NativeMethods.WS_EX_NOACTIVATE
+                                   | NativeMethods.WS_EX_TOOLWINDOW;
             return (exStyle & ignoreMask) != 0;
         }
 

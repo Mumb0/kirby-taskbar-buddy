@@ -43,7 +43,7 @@ namespace KirbyTaskbarBuddy {
         private static readonly HashSet<int> _downKeys = new HashSet<int>();
         private static KirbyTaskbarBuddyContext _instance;
 
-        private bool _isPaused = false;
+        private bool _isPaused;
         private bool _overlayEnabled = true;
         private bool _combatEnabled = true;
         private int _scale = 2;
@@ -74,50 +74,50 @@ namespace KirbyTaskbarBuddy {
         private readonly Random _rng = new Random();
         private KirbyOverlayWindow _enemyOverlay;
         private EnemyDef _activeEnemy;
-        private double _enemyX = 0.0;
-        private double _enemyAnimTime = 0.0;
-        private double _enemySpawnTimerSeconds = 0.0;
+        private double _enemyX;
+        private double _enemyAnimTime;
+        private double _enemySpawnTimerSeconds;
         private int _lastEnemyRenderedX = int.MinValue;
         private int _lastEnemyRenderedY = int.MinValue;
-        private SpriteTile _lastEnemyRenderedTile = null;
+        private SpriteTile _lastEnemyRenderedTile;
 
         private SpriteTile[] _sleepFrames;
         private SleepState _sleepState = SleepState.Awake;
-        private double _sleepAnimTime = 0.0;
-        private long _lastInputMs = 0;
+        private double _sleepAnimTime;
+        private long _lastInputMs;
         private Point _lastMousePos;
-        private uint _lastSysInputTick = 0;
+        private uint _lastSysInputTick;
 
         private SwallowState _swallowState = SwallowState.None;
-        private double _swallowAnimTime = 0.0;
+        private double _swallowAnimTime;
 
         private KirbyOverlayWindow _vfxOverlay;
-        private AnimClip _activeVfxClip = null;
-        private double _vfxX = 0.0;
-        private double _vfxY = 0.0;
-        private double _vfxAnimTime = 0.0;
+        private AnimClip _activeVfxClip;
+        private double _vfxX;
+        private double _vfxY;
+        private double _vfxAnimTime;
         private int _lastVfxRenderedX = int.MinValue;
         private int _lastVfxRenderedY = int.MinValue;
-        private SpriteTile _lastVfxRenderedTile = null;
+        private SpriteTile _lastVfxRenderedTile;
 
         private double _kirbyX = -64;
-        private double _animTime = 0.0;
-        private bool _isJumping = false;
-        private double _jumpY = 0.0;
-        private double _jumpVelY = 0.0;
+        private double _animTime;
+        private bool _isJumping;
+        private double _jumpY;
+        private double _jumpVelY;
         private int _lastRenderedX = int.MinValue;
         private int _lastRenderedY = int.MinValue;
-        private SpriteTile _lastRenderedTile = null;
+        private SpriteTile _lastRenderedTile;
         private IntPtr _lastForegroundWindow = IntPtr.Zero;
 
         // Throttles fullscreen and screen working-area queries to once every 15 ticks (~240ms)
         // and reuses a single StringBuilder to keep the 60Hz tick loop completely allocation-free.
-        private int _envCheckCounter = 0;
-        private bool _isFullscreenCached = false;
+        private int _envCheckCounter;
+        private bool _isFullscreenCached;
         private Rectangle _cachedWorkArea;
         private readonly StringBuilder _classNameSb = new StringBuilder(64);
         private IntPtr _trayIconHandle = IntPtr.Zero;
-        private Icon _loadedTrayIcon = null;
+        private Icon _loadedTrayIcon;
 
         public KirbyTaskbarBuddyContext() {
             _instance = this;

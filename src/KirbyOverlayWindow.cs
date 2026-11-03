@@ -15,15 +15,15 @@ namespace KirbyTaskbarBuddy {
         private IntPtr _hDib = IntPtr.Zero;
         private IntPtr _oldBmp = IntPtr.Zero;
         private IntPtr _dibBits = IntPtr.Zero;
-        private int _dibSize = 0;
+        private int _dibSize;
 
         // Tracks the last sprite tile and scale written into _dibBits so we only
         // touch pixel memory when the animation frame actually changes (~6-15 Hz),
         // rather than on every 1-pixel movement tick (60 Hz).
-        private SpriteTile _renderedTile = null;
-        private int _renderedScale = 0;
+        private SpriteTile _renderedTile;
+        private int _renderedScale;
         private Rectangle _dirtyRect = Rectangle.Empty;
-        private bool _isCleared = false;
+        private bool _isCleared;
 
         /// <summary>
         /// Indicates whether the overlay is currently parked off-screen with zero opacity.

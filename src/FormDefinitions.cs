@@ -18,6 +18,15 @@ namespace KirbyTaskbarBuddy
     }
 
     /// <summary>
+    /// States for Normal Kirby's enemy inhale and swallow sequence.
+    /// </summary>
+    public enum SwallowState
+    {
+        None,
+        Inhaling
+    }
+
+    /// <summary>
     /// Controls how <see cref="SpriteLoader"/> aligns extracted spritesheet frames onto the 80x80 logical canvas.
     /// </summary>
     public enum PivotMode
@@ -54,7 +63,13 @@ namespace KirbyTaskbarBuddy
         /// Aligns an explicit pixel coordinate <c>(CustomPivotX, CustomPivotY)</c> within each frame to <c>(PIVOT_X, PIVOT_Y)</c>.
         /// When <c>CustomPivotY &lt; 0</c>, aligns the bottom row of the source rectangle (<c>Height - 1</c>) to <c>PIVOT_Y</c>.
         /// </summary>
-        CustomPivot
+        CustomPivot,
+
+        /// <summary>
+        /// Synthesizes Normal Kirby's black-and-white inhale air particles spawning at max inhale range
+        /// and flying into Kirby's mouth.
+        /// </summary>
+        InhaleWind
     }
 
     /// <summary>
@@ -97,6 +112,8 @@ namespace KirbyTaskbarBuddy
         public AnimClip Guard;
         public AnimClip Jump;
         public AnimClip Stand;
+        public AnimClip Inhale;
+        public AnimClip InhaleVfx;
     }
 
     /// <summary>
@@ -231,6 +248,11 @@ namespace KirbyTaskbarBuddy
             return Clip(rects, 0.05, false, PivotMode.FeetBottom4Rows);
         }
 
+        public static AnimClip VfxClip(double speed, bool loop, params Rectangle[] rects)
+        {
+            return Clip(rects, speed, loop, PivotMode.Center);
+        }
+
         /// <summary>
         /// Registers all 19 Kirby copy abilities and their spritesheet animation clips.
         /// </summary>
@@ -243,6 +265,12 @@ namespace KirbyTaskbarBuddy
                 GuardClip(Row(263, 26, 25, 79, 108)),
                 JumpClip(R(66, 193, 23, 24), R(94, 193, 23, 23), R(122, 194, 21, 22), R(147, 193, 24, 23), R(176, 193, 23, 24)),
                 StandClip(Row(55, 24, 23, 113, 142)));
+
+            if (normalForm != null)
+            {
+                normalForm.Inhale = Clip(new Rectangle[] { R(22, 94, 21, 24), R(48, 86, 21, 32) }, 0.15, false, PivotMode.FeetBottom4Rows);
+                normalForm.InhaleVfx = Clip(Strip(48, 86, 21, 32, 10, 0), 0.4, false, PivotMode.InhaleWind);
+            }
 
             AddForm(forms, keyToForm, ref normalForm, "ice", "l", "kirby-ice.png",
                 WalkClip(Row(213, 24, 34, 6, 35, 63, 92)),

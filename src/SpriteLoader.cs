@@ -119,6 +119,8 @@ namespace KirbyTaskbarBuddy
                     ExpandBounds(form.Guard, ref reqW, ref reqH);
                     ExpandBounds(form.Jump, ref reqW, ref reqH);
                     ExpandBounds(form.Stand, ref reqW, ref reqH);
+                    ExpandBounds(form.Inhale, ref reqW, ref reqH);
+                    ExpandBounds(form.InhaleVfx, ref reqW, ref reqH);
 
                     using (FastSheet rawSheet = OpenSpriteSheet(form.FileName, reqW, reqH))
                     {
@@ -133,6 +135,8 @@ namespace KirbyTaskbarBuddy
                         LoadClip(rawSheet, form.Guard, scratch);
                         LoadClip(rawSheet, form.Jump, scratch);
                         LoadClip(rawSheet, form.Stand, scratch);
+                        LoadClip(rawSheet, form.Inhale, scratch);
+                        LoadClip(rawSheet, form.InhaleVfx, scratch);
                     }
                 }
             }
@@ -181,6 +185,10 @@ namespace KirbyTaskbarBuddy
             if (clip.Pivot == PivotMode.JumpArc)
             {
                 clip.RawFrames = ExtractJumpTiles(rawSheet, rects, scratch);
+            }
+            else if (clip.Pivot == PivotMode.InhaleWind)
+            {
+                clip.RawFrames = ExtractInhaleWindTiles(rects.Length, scratch);
             }
             else
             {
@@ -558,6 +566,67 @@ namespace KirbyTaskbarBuddy
             }
 
             return BuildSpriteTile(scratch);
+        }
+
+        /// <summary>
+        /// Synthesizes SNES Kirby Super Star's 4 black-and-white inhale air particles spawning in an arc
+        /// at max inhale range and accelerating inward into Kirby's open mouth across <paramref name="frameCount"/> frames.
+        /// </summary>
+        private static SpriteTile[] ExtractInhaleWindTiles(int frameCount, int[] scratch)
+        {
+            if (frameCount <= 0) return null;
+            SpriteTile[] tiles = new SpriteTile[frameCount];
+
+            // With INHALE_VFX_OFFSET_X = 36, Kirby's center is at X = 40 - 36 = 4 and his open mouth edge is at X = 14, Y = 39.
+            const int mouthX = 14;
+            const int mouthY = NativeMethods.PIVOT_Y - 15;
+
+            int[] startDx = new int[] { 46, 52, 52, 46 };
+            int[] startDy = new int[] { -20, -7, 7, 20 };
+            bool[] blackOnTop = new bool[] { true, true, false, false };
+
+            int black = MakePremulArgb(255, 0, 0, 0);
+            int white = MakePremulArgb(255, 255, 255, 255);
+
+            for (int i = 0; i < frameCount; i++)
+            {
+                Array.Clear(scratch, 0, scratch.Length);
+                double t = frameCount > 1 ? (double)i / (frameCount - 1) : 0.0;
+                double factor = 1.0 - (0.35 * t + 0.60 * t * t);
+
+                for (int p = 0; p < 4; p++)
+                {
+                    int px = mouthX + (int)Math.Round(startDx[p] * factor);
+                    int py = mouthY + (int)Math.Round(startDy[p] * factor) - 2;
+                    int topColor = blackOnTop[p] ? black : white;
+                    int botColor = blackOnTop[p] ? white : black;
+
+                    Write2x2Block(scratch, px, py, topColor);
+                    Write2x2Block(scratch, px, py + 2, botColor);
+                }
+
+                tiles[i] = BuildSpriteTile(scratch);
+            }
+
+            return tiles;
+        }
+
+        private static void Write2x2Block(int[] scratch, int x, int y, int color)
+        {
+            for (int dy = 0; dy < 2; dy++)
+            {
+                int ty = y + dy;
+                if (ty < 0 || ty >= NativeMethods.TILE_SIZE) continue;
+                int row = ty * NativeMethods.TILE_SIZE;
+                for (int dx = 0; dx < 2; dx++)
+                {
+                    int tx = x + dx;
+                    if (tx >= 0 && tx < NativeMethods.TILE_SIZE)
+                    {
+                        scratch[row + tx] = color;
+                    }
+                }
+            }
         }
 
         /// <summary>

@@ -268,6 +268,66 @@ namespace KirbyTaskbarBuddy.Tests
         }
 
         [Fact]
+        public void CanStartInhale_RequiresNormalFormAwakeGroundedAndEnemyWithinScaledRange()
+        {
+            SpriteTile[] inhaleTiles = CreateDummyTiles(2);
+            FormDef normalForm = new FormDef
+            {
+                Name = "normal",
+                Key = "0",
+                Inhale = new AnimClip { RawFrames = inhaleTiles, Frames = inhaleTiles }
+            };
+            FormDef swordForm = new FormDef
+            {
+                Name = "sword",
+                Key = "w",
+                Inhale = null
+            };
+            EnemyDef enemy = new EnemyDef { Name = "waddle-dee" };
+
+            // In range in front of Normal Kirby at 2x scale (max distance = 72 * 2 = 144px):
+            Assert.True(KirbyTaskbarBuddyContext.CanStartInhale(normalForm, SleepState.Awake, false, SwallowState.None, enemy, 100.0, 244.0, 2));
+
+            // Out of range (145px > 144px at 2x scale):
+            Assert.False(KirbyTaskbarBuddyContext.CanStartInhale(normalForm, SleepState.Awake, false, SwallowState.None, enemy, 100.0, 245.0, 2));
+
+            // Enemy already behind Kirby (enemyX < kirbyX):
+            Assert.False(KirbyTaskbarBuddyContext.CanStartInhale(normalForm, SleepState.Awake, false, SwallowState.None, enemy, 100.0, 99.0, 2));
+
+            // Copy ability form (not "normal"), sleeping, jumping, already inhaling, or no active enemy:
+            Assert.False(KirbyTaskbarBuddyContext.CanStartInhale(swordForm, SleepState.Awake, false, SwallowState.None, enemy, 100.0, 140.0, 2));
+            Assert.False(KirbyTaskbarBuddyContext.CanStartInhale(normalForm, SleepState.Sleeping, false, SwallowState.None, enemy, 100.0, 140.0, 2));
+            Assert.False(KirbyTaskbarBuddyContext.CanStartInhale(normalForm, SleepState.Awake, true, SwallowState.None, enemy, 100.0, 140.0, 2));
+            Assert.False(KirbyTaskbarBuddyContext.CanStartInhale(normalForm, SleepState.Awake, false, SwallowState.Inhaling, enemy, 100.0, 140.0, 2));
+            Assert.False(KirbyTaskbarBuddyContext.CanStartInhale(normalForm, SleepState.Awake, false, SwallowState.None, null, 100.0, 140.0, 2));
+        }
+
+        [Fact]
+        public void GetClipFrame_LoopsWhenLoopEnabled_AndClampsToFinalFrameWhenLoopDisabled()
+        {
+            SpriteTile[] tiles = CreateDummyTiles(3);
+            AnimClip loopClip = new AnimClip { Loop = true, RawFrames = tiles, Frames = tiles };
+            AnimClip onceClip = new AnimClip { Loop = false, RawFrames = tiles, Frames = tiles };
+
+            Assert.Same(tiles[0], KirbyTaskbarBuddyContext.GetClipFrame(loopClip, 0.2));
+            Assert.Same(tiles[1], KirbyTaskbarBuddyContext.GetClipFrame(loopClip, 1.5));
+            Assert.Same(tiles[2], KirbyTaskbarBuddyContext.GetClipFrame(loopClip, 2.9));
+            Assert.Same(tiles[0], KirbyTaskbarBuddyContext.GetClipFrame(loopClip, 3.1));
+
+            Assert.Same(tiles[0], KirbyTaskbarBuddyContext.GetClipFrame(onceClip, 0.2));
+            Assert.Same(tiles[1], KirbyTaskbarBuddyContext.GetClipFrame(onceClip, 1.5));
+            Assert.Same(tiles[2], KirbyTaskbarBuddyContext.GetClipFrame(onceClip, 2.9));
+            Assert.Same(tiles[2], KirbyTaskbarBuddyContext.GetClipFrame(onceClip, 9.5));
+            Assert.Null(KirbyTaskbarBuddyContext.GetClipFrame(null, 0.0));
+
+            // GetVfxFrame loops when Loop is true, and returns null (despawning the VFX) once a non-looping clip completes.
+            Assert.Same(tiles[0], KirbyTaskbarBuddyContext.GetVfxFrame(loopClip, 3.1));
+            Assert.Same(tiles[2], KirbyTaskbarBuddyContext.GetVfxFrame(onceClip, 2.9));
+            Assert.Null(KirbyTaskbarBuddyContext.GetVfxFrame(onceClip, 3.0));
+            Assert.Null(KirbyTaskbarBuddyContext.GetVfxFrame(null, 0.0));
+        }
+
+        [Fact]
         public void FullscreenFilterHelpers_IgnoreShellClassesAndOverlayStyles()
         {
             Assert.True(KirbyTaskbarBuddyContext.IsShellOrOverlayWindowClass("Progman"));

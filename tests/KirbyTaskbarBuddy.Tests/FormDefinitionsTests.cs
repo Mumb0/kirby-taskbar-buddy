@@ -49,6 +49,15 @@ namespace KirbyTaskbarBuddy.Tests
                 AssertClipDefinitionValid(form.Name, "Guard", form.Guard, minRects: 2);
                 AssertClipDefinitionValid(form.Name, "Jump", form.Jump, minRects: 5);
                 AssertClipDefinitionValid(form.Name, "Stand", form.Stand, minRects: 2);
+
+                if (form.Name == "normal")
+                {
+                    AssertClipDefinitionValid(form.Name, "Inhale", form.Inhale, minRects: 2);
+                    Assert.False(form.Inhale.Loop);
+                    AssertClipDefinitionValid(form.Name, "InhaleVfx", form.InhaleVfx, minRects: 10);
+                    Assert.False(form.InhaleVfx.Loop);
+                    Assert.Equal(PivotMode.InhaleWind, form.InhaleVfx.Pivot);
+                }
             }
         }
 

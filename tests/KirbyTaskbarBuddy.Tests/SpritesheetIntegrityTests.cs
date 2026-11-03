@@ -34,6 +34,15 @@ namespace KirbyTaskbarBuddy.Tests
                         AssertRectsWithinBitmap(form.Name, "Jump", form.Jump.SourceRects, bmp);
                         AssertRectsWithinBitmap(form.Name, "Stand", form.Stand.SourceRects, bmp);
 
+                        if (form.Inhale != null)
+                        {
+                            AssertRectsWithinBitmap(form.Name, "Inhale", form.Inhale.SourceRects, bmp);
+                        }
+                        if (form.InhaleVfx != null)
+                        {
+                            AssertRectsWithinBitmap(form.Name, "InhaleVfx", form.InhaleVfx.SourceRects, bmp);
+                        }
+
                         if (form.Guard.Pivot == PivotMode.MirrorGuard)
                         {
                             // Mirror Guard also composites Kirby's body (37, 880, 31, 27) and bubble rim (2, 877, 32, 34).
@@ -135,6 +144,15 @@ namespace KirbyTaskbarBuddy.Tests
                     AssertLoadedClipValid(form.Name, "Guard", form.Guard, expectedMinFrames: 2);
                     AssertLoadedClipValid(form.Name, "Jump", form.Jump, expectedMinFrames: 5);
                     AssertLoadedClipValid(form.Name, "Stand", form.Stand, expectedMinFrames: 2);
+
+                    if (form.Inhale != null)
+                    {
+                        AssertLoadedClipValid(form.Name, "Inhale", form.Inhale, expectedMinFrames: 2);
+                    }
+                    if (form.InhaleVfx != null)
+                    {
+                        AssertLoadedClipValid(form.Name, "InhaleVfx", form.InhaleVfx, expectedMinFrames: 3);
+                    }
                 }
 
                 foreach (EnemyDef enemy in enemies)

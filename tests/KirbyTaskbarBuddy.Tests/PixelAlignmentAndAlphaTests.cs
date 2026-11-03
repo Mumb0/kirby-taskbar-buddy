@@ -56,6 +56,15 @@ namespace KirbyTaskbarBuddy.Tests
                     AssertClipPremultipliedAlpha(form.Name, "Guard", form.Guard);
                     AssertClipPremultipliedAlpha(form.Name, "Jump", form.Jump);
                     AssertClipPremultipliedAlpha(form.Name, "Stand", form.Stand);
+
+                    if (form.Inhale != null)
+                    {
+                        AssertClipPremultipliedAlpha(form.Name, "Inhale", form.Inhale);
+                    }
+                    if (form.InhaleVfx != null)
+                    {
+                        AssertClipPremultipliedAlpha(form.Name, "InhaleVfx", form.InhaleVfx);
+                    }
                 }
 
                 foreach (EnemyDef enemy in enemies)
@@ -97,6 +106,11 @@ namespace KirbyTaskbarBuddy.Tests
                 {
                     AssertFeetAlignedToFloor(form.Name, "Walk", form.Walk.RawFrames);
                     AssertFeetAlignedToFloor(form.Name, "Stand", form.Stand.RawFrames);
+
+                    if (form.Inhale != null)
+                    {
+                        AssertFeetAlignedToFloor(form.Name, "Inhale", form.Inhale.RawFrames);
+                    }
 
                     if (form.Guard.Pivot == PivotMode.MirrorGuard)
                     {

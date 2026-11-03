@@ -29,7 +29,10 @@ namespace KirbyTaskbarBuddy {
         internal const double JUMP_INIT_VEL = 4.2;
         internal const double JUMP_GRAVITY = 0.18;
         internal const double ENEMY_SPAWN_MIN_SECONDS = 5.0;
-        internal const double ENEMY_SPAWN_MAX_SECONDS = 600.0;
+        internal const double ENEMY_SPAWN_MAX_SECONDS = 10.0;
+        internal const double INHALE_RANGE = 72.0;
+        internal const double INHALE_VFX_OFFSET_X = 36.0;
+        internal const double INHALE_VFX_OFFSET_Y = 0.0;
         internal static readonly double[] SleepTimeoutValues = new double[] { 10.0, 30.0, 60.0, 180.0, 300.0, 600.0, -1.0 };
 
         // Static reference to the hook delegate prevents the GC from collecting the callback while unmanaged code holds it.
@@ -84,6 +87,18 @@ namespace KirbyTaskbarBuddy {
         private long _lastInputMs = 0;
         private Point _lastMousePos;
         private uint _lastSysInputTick = 0;
+
+        private SwallowState _swallowState = SwallowState.None;
+        private double _swallowAnimTime = 0.0;
+
+        private KirbyOverlayWindow _vfxOverlay;
+        private AnimClip _activeVfxClip = null;
+        private double _vfxX = 0.0;
+        private double _vfxY = 0.0;
+        private double _vfxAnimTime = 0.0;
+        private int _lastVfxRenderedX = int.MinValue;
+        private int _lastVfxRenderedY = int.MinValue;
+        private SpriteTile _lastVfxRenderedTile = null;
 
         private double _kirbyX = -64;
         private double _animTime = 0.0;
@@ -178,9 +193,9 @@ namespace KirbyTaskbarBuddy {
 
             _cachedWorkArea = Screen.PrimaryScreen.WorkingArea;
 
-            // Initialize both layered surfaces (SourceConstantAlpha = 0 off-screen) before calling Show()
-            // so Windows/DWM never maps an uninitialized layered HWND, and show _enemyOverlay before _overlay
-            // so Kirby naturally sits above enemies in topmost Z-order without runtime Show()/Hide() churn.
+            // Initialize layered surfaces (SourceConstantAlpha = 0 off-screen) before calling Show()
+            // so Windows/DWM never maps an uninitialized layered HWND, ordered back-to-front:
+            // _enemyOverlay -> _overlay (Kirby) -> _vfxOverlay (inhale wind / attack VFX).
             _enemyOverlay = new KirbyOverlayWindow();
             IntPtr enemyHandle = _enemyOverlay.Handle;
             _enemyOverlay.ClearOverlay(_scale);
@@ -190,6 +205,11 @@ namespace KirbyTaskbarBuddy {
             IntPtr overlayHandle = _overlay.Handle;
             _overlay.ClearOverlay(_scale);
             _overlay.Show();
+
+            _vfxOverlay = new KirbyOverlayWindow();
+            IntPtr vfxHandle = _vfxOverlay.Handle;
+            _vfxOverlay.ClearOverlay(_scale);
+            _vfxOverlay.Show();
 
             _stopwatch = Stopwatch.StartNew();
             _lastTickMs = _stopwatch.ElapsedMilliseconds;
@@ -301,6 +321,7 @@ namespace KirbyTaskbarBuddy {
             _scale4xItem.Checked = _scale == 4;
             _lastRenderedTile = null;
             _lastEnemyRenderedTile = null;
+            _lastVfxRenderedTile = null;
             SaveSettings();
             NativeMethods.TrimMemory();
         }
@@ -536,6 +557,98 @@ namespace KirbyTaskbarBuddy {
         }
 
         /// <summary>
+        /// Resolves the <see cref="SpriteTile"/> for <paramref name="clip"/> at <paramref name="animTime"/>,
+        /// wrapping modulo frame count when <see cref="AnimClip.Loop"/> is <c>true</c> or clamping to the last frame when <c>false</c>.
+        /// </summary>
+        internal static SpriteTile GetClipFrame(AnimClip clip, double animTime) {
+            if (clip == null || !clip.HasFrames()) {
+                return null;
+            }
+
+            SpriteTile[] frames = clip.Frames;
+            int frameCount = frames.Length;
+            int idx = (int)Math.Floor(animTime);
+
+            if (clip.Loop) {
+                idx %= frameCount;
+
+                if (idx < 0) {
+                    idx += frameCount;
+                }
+            }
+            else {
+                if (idx < 0) {
+                    idx = 0;
+                }
+                else if (idx >= frameCount) {
+                    idx = frameCount - 1;
+                }
+            }
+
+            return frames[idx];
+        }
+
+        /// <summary>
+        /// Resolves the <see cref="SpriteTile"/> for a visual effect <paramref name="clip"/> at <paramref name="animTime"/>,
+        /// wrapping when <see cref="AnimClip.Loop"/> is <c>true</c> or returning <c>null</c> (despawning the VFX)
+        /// once <paramref name="animTime"/> completes all frames of a non-looping clip.
+        /// </summary>
+        internal static SpriteTile GetVfxFrame(AnimClip clip, double animTime) {
+            if (clip == null || !clip.HasFrames()) {
+                return null;
+            }
+
+            SpriteTile[] frames = clip.Frames;
+            int frameCount = frames.Length;
+            int idx = (int)Math.Floor(animTime);
+
+            if (clip.Loop) {
+                idx %= frameCount;
+
+                if (idx < 0) {
+                    idx += frameCount;
+                }
+
+                return frames[idx];
+            }
+
+            if (idx < 0 || idx >= frameCount) {
+                return null;
+            }
+
+            return frames[idx];
+        }
+
+        /// <summary>
+        /// Checks whether Kirby can begin inhaling an approaching enemy: Kirby must be awake, on the ground,
+        /// in Normal form with an <see cref="FormDef.Inhale"/> clip, and the enemy must be in front of Kirby within <see cref="INHALE_RANGE"/>.
+        /// </summary>
+        internal static bool CanStartInhale(
+            FormDef currentForm,
+            SleepState sleepState,
+            bool isJumping,
+            SwallowState swallowState,
+            EnemyDef activeEnemy,
+            double kirbyX,
+            double enemyX,
+            int scale) {
+            if (sleepState != SleepState.Awake || isJumping || swallowState != SwallowState.None) {
+                return false;
+            }
+
+            if (currentForm == null || currentForm.Name != "normal" || currentForm.Inhale == null || !currentForm.Inhale.HasFrames()) {
+                return false;
+            }
+
+            if (activeEnemy == null) {
+                return false;
+            }
+
+            double dist = enemyX - kirbyX;
+            return dist >= 0.0 && dist <= INHALE_RANGE * scale;
+        }
+
+        /// <summary>
         /// Main ~60 Hz update loop driving input idle detection, fullscreen auto-hide,
         /// sleep/wake state transitions, cursor guard proximity, jump physics, and frame rendering.
         /// </summary>
@@ -565,8 +678,8 @@ namespace KirbyTaskbarBuddy {
             if (hasInput) {
                 NotifyUserActivity();
             }
-            else if (_idleSleepSeconds > 0 && _sleepState == SleepState.Awake && !_isJumping && _sleepFrames != null &&
-                     _sleepFrames.Length >= 8) {
+            else if (_idleSleepSeconds > 0 && _sleepState == SleepState.Awake && !_isJumping &&
+                     _swallowState == SwallowState.None && _sleepFrames != null && _sleepFrames.Length >= 8) {
                 double idleSeconds = (nowMs - _lastInputMs) / 1000.0;
 
                 if (idleSeconds >= _idleSleepSeconds) {
@@ -605,6 +718,11 @@ namespace KirbyTaskbarBuddy {
                     _lastEnemyRenderedTile = null;
                 }
 
+                if (_vfxOverlay != null && !_vfxOverlay.IsCleared) {
+                    _vfxOverlay.ClearOverlay(_scale);
+                    _lastVfxRenderedTile = null;
+                }
+
                 return;
             }
 
@@ -623,47 +741,73 @@ namespace KirbyTaskbarBuddy {
                     return;
                 }
 
-                // Check if mouse pointer is close to Kirby's body on the taskbar (only guards when on the ground).
-                bool isMouseNear = IsMouseNearKirby(mouse, _kirbyX, workArea.Bottom, _scale, _isJumping);
-
-                bool useJump = _isJumping && _currentForm.Jump != null && _currentForm.Jump.HasFrames(5);
-                bool useGuard = !useJump && isMouseNear && _currentForm.Guard != null && _currentForm.Guard.HasFrames();
-                AnimClip activeClip = useJump ? _currentForm.Jump : useGuard ? _currentForm.Guard : _currentForm.Walk;
-
-                if (_isJumping) {
-                    StepJumpPhysics(ref _isJumping, ref _kirbyX, ref _jumpY, ref _jumpVelY, delta60, _scale);
-                }
-                else if (!isMouseNear) {
-                    _kirbyX += WALK_SPEED * _scale * delta60;
-                    _animTime += activeClip.Speed * delta60;
-                }
-                else {
-                    // Match SNES Kirby Super Star guard flash / shield shimmer speed (4 frames per state @ 60Hz = 15 FPS).
-                    _animTime += activeClip.Speed * delta60;
+                if (_swallowState == SwallowState.None &&
+                    CanStartInhale(_currentForm, _sleepState, _isJumping, _swallowState, _activeEnemy, _kirbyX, _enemyX, _scale)) {
+                    _swallowState = SwallowState.Inhaling;
+                    _swallowAnimTime = 0.0;
+                    _vfxAnimTime = 0.0;
                 }
 
-                // Wrap Kirby seamlessly from the right edge of the monitor back to the left edge.
-                if (_kirbyX > workArea.Right + halfWidth) {
-                    _kirbyX = workArea.Left - halfWidth;
-                }
+                if (_swallowState == SwallowState.Inhaling) {
+                    if (!_combatEnabled || _activeEnemy == null || _enemyX < _kirbyX ||
+                        _currentForm.Inhale == null || !_currentForm.Inhale.HasFrames()) {
+                        _swallowState = SwallowState.None;
+                        _swallowAnimTime = 0.0;
+                        _activeVfxClip = null;
+                    }
+                    else {
+                        _swallowAnimTime += _currentForm.Inhale.Speed * delta60;
+                        frameToRender = GetClipFrame(_currentForm.Inhale, _swallowAnimTime);
 
-                SpriteTile[] activeFrames = activeClip.Frames;
-
-                int frameIdx;
-
-                if (useJump) {
-                    frameIdx = GetJumpFrameIndex(_jumpVelY);
-                }
-                else {
-                    int frameCount = activeFrames.Length;
-                    frameIdx = (int)Math.Floor(_animTime) % frameCount;
-
-                    if (frameIdx < 0) {
-                        frameIdx += frameCount;
+                        if (_currentForm.InhaleVfx != null && _currentForm.InhaleVfx.HasFrames()) {
+                            _activeVfxClip = _currentForm.InhaleVfx;
+                            _vfxX = _kirbyX + INHALE_VFX_OFFSET_X * _scale;
+                            _vfxY = INHALE_VFX_OFFSET_Y;
+                            _vfxAnimTime += _activeVfxClip.Speed * delta60;
+                        }
+                        else {
+                            _activeVfxClip = null;
+                        }
                     }
                 }
 
-                frameToRender = activeFrames[frameIdx];
+                if (_swallowState == SwallowState.None) {
+                    _activeVfxClip = null;
+
+                    // Check if mouse pointer is close to Kirby's body on the taskbar (only guards when on the ground).
+                    bool isMouseNear = IsMouseNearKirby(mouse, _kirbyX, workArea.Bottom, _scale, _isJumping);
+
+                    bool useJump = _isJumping && _currentForm.Jump != null && _currentForm.Jump.HasFrames(5);
+                    bool useGuard = !useJump && isMouseNear && _currentForm.Guard != null && _currentForm.Guard.HasFrames();
+                    AnimClip activeClip = useJump ? _currentForm.Jump : useGuard ? _currentForm.Guard : _currentForm.Walk;
+
+                    if (_isJumping) {
+                        StepJumpPhysics(ref _isJumping, ref _kirbyX, ref _jumpY, ref _jumpVelY, delta60, _scale);
+                    }
+                    else if (!isMouseNear) {
+                        _kirbyX += WALK_SPEED * _scale * delta60;
+                        _animTime += activeClip.Speed * delta60;
+                    }
+                    else {
+                        // Match SNES Kirby Super Star guard flash / shield shimmer speed (4 frames per state @ 60Hz = 15 FPS).
+                        _animTime += activeClip.Speed * delta60;
+                    }
+
+                    // Wrap Kirby seamlessly from the right edge of the monitor back to the left edge.
+                    if (_kirbyX > workArea.Right + halfWidth) {
+                        _kirbyX = workArea.Left - halfWidth;
+                    }
+
+                    if (useJump) {
+                        frameToRender = activeClip.Frames[GetJumpFrameIndex(_jumpVelY)];
+                    }
+                    else {
+                        frameToRender = GetClipFrame(activeClip, _animTime);
+                    }
+                }
+            }
+            else {
+                _activeVfxClip = null;
             }
 
             if (frameToRender == null) {
@@ -680,11 +824,14 @@ namespace KirbyTaskbarBuddy {
                 _lastRenderedY = screenY;
                 _lastRenderedTile = frameToRender;
             }
+
+            UpdateVfx(workArea, halfWidth);
         }
 
         /// <summary>
         /// Re-asserts <c>HWND_TOPMOST</c> when the foreground window changes so clicking the taskbar
-        /// does not cover Kirby or active enemies, keeping <see cref="_enemyOverlay"/> directly behind <see cref="_overlay"/>.
+        /// does not cover Kirby or active enemies, ordered back-to-front:
+        /// <see cref="_enemyOverlay"/> -> <see cref="_overlay"/> -> <see cref="_vfxOverlay"/>.
         /// </summary>
         private void RefreshTopmostOrder() {
             if (_overlay == null || !_overlay.IsHandleCreated) {
@@ -698,6 +845,42 @@ namespace KirbyTaskbarBuddy {
             }
 
             NativeMethods.SetWindowPos(_overlay.Handle, hwndTopMost, 0, 0, 0, 0, NativeMethods.TOPMOST_FLAGS);
+
+            if (_vfxOverlay != null && _vfxOverlay.IsHandleCreated) {
+                NativeMethods.SetWindowPos(_vfxOverlay.Handle, hwndTopMost, 0, 0, 0, 0, NativeMethods.TOPMOST_FLAGS);
+            }
+        }
+
+        /// <summary>
+        /// Renders the currently active visual effect (<see cref="_activeVfxClip"/>, such as Kirby's inhale wind
+        /// or copy ability attack particles) onto <see cref="_vfxOverlay"/>, or clears the overlay when inactive.
+        /// </summary>
+        private void UpdateVfx(Rectangle workArea, int halfWidth) {
+            if (_vfxOverlay == null) {
+                return;
+            }
+
+            SpriteTile vfxTile = GetVfxFrame(_activeVfxClip, _vfxAnimTime);
+
+            if (vfxTile == null) {
+                if (!_vfxOverlay.IsCleared) {
+                    _vfxOverlay.ClearOverlay(_scale);
+                    _lastVfxRenderedTile = null;
+                }
+
+                return;
+            }
+
+            int vfxScreenX = (int)Math.Round(_vfxX) - halfWidth;
+            int vfxScreenY = workArea.Bottom - (NativeMethods.PIVOT_Y + 1) * _scale - (int)Math.Round(_vfxY * _scale);
+
+            if (vfxScreenX != _lastVfxRenderedX || vfxScreenY != _lastVfxRenderedY ||
+                vfxTile != _lastVfxRenderedTile || _vfxOverlay.IsCleared) {
+                _vfxOverlay.UpdateSpriteFrame(vfxTile, _scale, vfxScreenX, vfxScreenY);
+                _lastVfxRenderedX = vfxScreenX;
+                _lastVfxRenderedY = vfxScreenY;
+                _lastVfxRenderedTile = vfxTile;
+            }
         }
 
         /// <summary>
@@ -808,6 +991,10 @@ namespace KirbyTaskbarBuddy {
                     return false;
                 }
 
+                if (_vfxOverlay != null && _vfxOverlay.IsHandleCreated && fg == _vfxOverlay.Handle) {
+                    return false;
+                }
+
                 if (!NativeMethods.IsWindowVisible(fg) || NativeMethods.IsIconic(fg)) {
                     return false;
                 }
@@ -848,7 +1035,7 @@ namespace KirbyTaskbarBuddy {
         /// a second time reverts Kirby back to Normal form).
         /// </summary>
         private void HandleKeySwitch(string keyName) {
-            if (keyName == null) {
+            if (keyName == null || _swallowState != SwallowState.None) {
                 return;
             }
 
@@ -901,9 +1088,17 @@ namespace KirbyTaskbarBuddy {
             if (!_combatEnabled) {
                 _activeEnemy = null;
                 _lastEnemyRenderedTile = null;
+                _swallowState = SwallowState.None;
+                _swallowAnimTime = 0.0;
+                _activeVfxClip = null;
+                _lastVfxRenderedTile = null;
 
                 if (_enemyOverlay != null && !_enemyOverlay.IsCleared) {
                     _enemyOverlay.ClearOverlay(_scale);
+                }
+
+                if (_vfxOverlay != null && !_vfxOverlay.IsCleared) {
+                    _vfxOverlay.ClearOverlay(_scale);
                 }
 
                 _enemySpawnTimerSeconds = NextEnemySpawnInterval(_rng, ENEMY_SPAWN_MIN_SECONDS, ENEMY_SPAWN_MAX_SECONDS);
@@ -966,6 +1161,10 @@ namespace KirbyTaskbarBuddy {
 
             if (_enemyOverlay != null) {
                 _enemyOverlay.Close();
+            }
+
+            if (_vfxOverlay != null) {
+                _vfxOverlay.Close();
             }
 
             if (_hookID != IntPtr.Zero) {

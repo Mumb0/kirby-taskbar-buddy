@@ -33,7 +33,7 @@ namespace KirbyTaskbarBuddy {
         internal const double INHALE_RANGE = 72.0;
         internal const double INHALE_VFX_OFFSET_X = 36.0;
         internal const double INHALE_VFX_OFFSET_Y = 0.0;
-        internal static readonly double[] SleepTimeoutValues = new double[] { 10.0, 30.0, 60.0, 180.0, 300.0, 600.0, -1.0 };
+        internal static readonly double[] SleepTimeoutValues = new[] { 10.0, 30.0, 60.0, 180.0, 300.0, 600.0, -1.0 };
 
         // Static reference to the hook delegate prevents the GC from collecting the callback while unmanaged code holds it.
         private static NativeMethods.LowLevelKeyboardProc _proc;
@@ -144,9 +144,9 @@ namespace KirbyTaskbarBuddy {
             _scale3xItem = new MenuItem("3x (Large)", (s, e) => SetScale(3)) { Checked = _scale == 3 };
             _scale4xItem = new MenuItem("4x (Extra Large)", (s, e) => SetScale(4)) { Checked = _scale == 4 };
             MenuItem scaleMenu = new MenuItem("Kirby Size",
-                new MenuItem[] { _scale1xItem, _scale2xItem, _scale3xItem, _scale4xItem });
+                new[] { _scale1xItem, _scale2xItem, _scale3xItem, _scale4xItem });
 
-            string[] sleepLabels = new string[]
+            string[] sleepLabels = new[]
             {
                 "10 Seconds",
                 "30 Seconds",
@@ -169,7 +169,7 @@ namespace KirbyTaskbarBuddy {
 
             MenuItem sleepMenu = new MenuItem("Sleep Timer", _sleepMenuItems);
 
-            ContextMenu menu = new ContextMenu(new MenuItem[]
+            ContextMenu menu = new ContextMenu(new[]
             {
                 new MenuItem("Kirby Taskbar Buddy") { Enabled = false },
                 new MenuItem("-"),

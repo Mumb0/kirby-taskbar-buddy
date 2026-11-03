@@ -140,12 +140,12 @@ namespace KirbyTaskbarBuddy {
     public static class FormDefinitions {
 
         // Standard 6-frame ping-pong walk sequence expanding 4 source walk frames into [0, 1, 2, 3, 2, 1]:
-        public static readonly int[] WalkPingPongSeq = new int[] { 0, 1, 2, 3, 2, 1 };
+        public static readonly int[] WalkPingPongSeq = new[] { 0, 1, 2, 3, 2, 1 };
 
         /// <summary>
         /// Source rectangles in <c>kirby-sleep.png</c> for nodding off, breathing in sleep, and startled wake-up.
         /// </summary>
-        public static readonly Rectangle[] SleepCoords = new Rectangle[]
+        public static readonly Rectangle[] SleepCoords = new[]
         {
             R(4, 6, 30, 28), // 0: Falling asleep (eyes closed)
             R(36, 6, 30, 28), // 1: Falling asleep (eyes open)
@@ -159,14 +159,14 @@ namespace KirbyTaskbarBuddy {
 
         // Frame index sequences driving the multi-stage sleep/wake transition animations:
         public static readonly int[]
-            HaltStandSeq = new int[] { 0, 0, 1, 0, 0, 1, 0 }; // Blink twice in current ability before nodding off
+            HaltStandSeq = new[] { 0, 0, 1, 0, 0, 1, 0 }; // Blink twice in current ability before nodding off
 
-        public static readonly int[] FallAsleepSeq = new int[] { 1, 1, 0, 1, 1, 0, 1, 1, 0 }; // Heavy eyelids in sleep cap
-        public static readonly int[] SleepLoopSeq = new int[] { 2, 3, 4, 5, 4, 3 }; // Continuous ping-pong breathing loop
-        public static readonly int[] WakeUpSeq = new int[] { 6, 7, 6, 7, 6, 7 }; // Startled wake-up flutter
+        public static readonly int[] FallAsleepSeq = new[] { 1, 1, 0, 1, 1, 0, 1, 1, 0 }; // Heavy eyelids in sleep cap
+        public static readonly int[] SleepLoopSeq = new[] { 2, 3, 4, 5, 4, 3 }; // Continuous ping-pong breathing loop
+        public static readonly int[] WakeUpSeq = new[] { 6, 7, 6, 7, 6, 7 }; // Startled wake-up flutter
 
         public static readonly int[]
-            PostWakeStandSeq = new int[] { 0, 1, 0 }; // Brief blink in current ability before walking
+            PostWakeStandSeq = new[] { 0, 1, 0 }; // Brief blink in current ability before walking
 
         /// <summary>
         /// Shorthand builder for a single spritesheet <see cref="Rectangle"/>.
@@ -267,7 +267,7 @@ namespace KirbyTaskbarBuddy {
                 StandClip(Row(55, 24, 23, 113, 142)));
 
             if (normalForm != null) {
-                normalForm.Inhale = Clip(new Rectangle[] { R(22, 94, 21, 24), R(48, 86, 21, 32) }, 0.15, false,
+                normalForm.Inhale = Clip(new[] { R(22, 94, 21, 24), R(48, 86, 21, 32) }, 0.15, false,
                     PivotMode.FeetBottom4Rows);
                 normalForm.InhaleVfx = Clip(Strip(48, 86, 21, 32, 10, 0), 0.4, false, PivotMode.InhaleWind);
             }

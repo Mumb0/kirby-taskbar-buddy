@@ -636,9 +636,9 @@ namespace KirbyTaskbarBuddy {
             const int mouthX = 14;
             const int mouthY = NativeMethods.PIVOT_Y - 15;
 
-            int[] startDx = new int[] { 46, 52, 52, 46 };
-            int[] startDy = new int[] { -20, -7, 7, 20 };
-            bool[] blackOnTop = new bool[] { true, true, false, false };
+            int[] startDx = new[] { 46, 52, 52, 46 };
+            int[] startDy = new[] { -20, -7, 7, 20 };
+            bool[] blackOnTop = new[] { true, true, false, false };
 
             int black = MakePremulArgb(255, 0, 0, 0);
             int white = MakePremulArgb(255, 255, 255, 255);

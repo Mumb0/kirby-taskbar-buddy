@@ -230,7 +230,7 @@ namespace KirbyTaskbarBuddy {
         }
 
         public static AnimClip EnemyWalkClip(params Rectangle[] rects) {
-            return Clip(rects, 0.08, true, PivotMode.FeetBottom4Rows);
+            return Clip(rects, 0.08, true);
         }
 
         public static AnimClip GuardClip(params Rectangle[] rects) {
@@ -246,7 +246,7 @@ namespace KirbyTaskbarBuddy {
         }
 
         public static AnimClip StandClip(params Rectangle[] rects) {
-            return Clip(rects, 0.05, false, PivotMode.FeetBottom4Rows);
+            return Clip(rects, 0.05, false);
         }
 
         public static AnimClip VfxClip(double speed, bool loop, params Rectangle[] rects) {
@@ -267,8 +267,7 @@ namespace KirbyTaskbarBuddy {
                 StandClip(Row(55, 24, 23, 113, 142)));
 
             if (normalForm != null) {
-                normalForm.Inhale = Clip(new[] { R(22, 94, 21, 24), R(48, 86, 21, 32) }, 0.15, false,
-                    PivotMode.FeetBottom4Rows);
+                normalForm.Inhale = Clip(new[] { R(22, 94, 21, 24), R(48, 86, 21, 32) }, 0.15, false);
                 normalForm.InhaleVfx = Clip(Strip(48, 86, 21, 32, 10, 0), 0.4, false, PivotMode.InhaleWind);
             }
 

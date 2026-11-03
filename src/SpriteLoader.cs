@@ -209,7 +209,7 @@ namespace KirbyTaskbarBuddy {
                             break;
                         case PivotMode.FeetBottom4Rows:
                         default:
-                            clip.RawFrames[i] = ExtractAlignedTile(rawSheet, r, scratch, false);
+                            clip.RawFrames[i] = ExtractAlignedTile(rawSheet, r, scratch);
                             break;
                     }
                 }

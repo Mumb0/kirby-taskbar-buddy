@@ -268,7 +268,7 @@ namespace KirbyTaskbarBuddy {
 
             if (normalForm != null) {
                 normalForm.Inhale = Clip(new[] { R(22, 94, 21, 24), R(48, 86, 21, 32) }, 0.15, false);
-                normalForm.InhaleVfx = Clip(Strip(48, 86, 21, 32, 10, 0), 0.4, false, PivotMode.InhaleWind);
+                normalForm.InhaleVfx = Clip(Strip(48, 86, 21, 32, 10, 0), 0.4, true, PivotMode.InhaleWind);
             }
 
             AddForm(forms, keyToForm, ref normalForm, "ice", "l", "kirby-ice.png",

@@ -92,6 +92,7 @@ namespace KirbyTaskbarBuddy {
 
         private SwallowState _swallowState = SwallowState.None;
         private double _swallowAnimTime;
+        private EnemyDef _swallowedEnemy;
 
         private readonly KirbyOverlayWindow _vfxOverlay;
         private AnimClip _activeVfxClip;
@@ -681,6 +682,30 @@ namespace KirbyTaskbarBuddy {
         }
 
         /// <summary>
+        /// Resolves the <see cref="FormDef"/> Kirby should transform into after swallowing <paramref name="swallowedEnemy"/>.
+        /// Returns the matching ability form if <see cref="EnemyDef.CopyAbility"/> is defined and registered in <paramref name="forms"/>,
+        /// or <paramref name="currentForm"/> if the enemy grants no ability.
+        /// </summary>
+        internal static FormDef ResolveSwallowedForm(
+            IList<FormDef> forms,
+            FormDef currentForm,
+            EnemyDef swallowedEnemy) {
+            if (forms == null || swallowedEnemy == null || string.IsNullOrEmpty(swallowedEnemy.CopyAbility)) {
+                return currentForm;
+            }
+
+            for (int i = 0; i < forms.Count; i++) {
+                FormDef candidate = forms[i];
+
+                if (candidate != null && candidate.Name == swallowedEnemy.CopyAbility) {
+                    return candidate;
+                }
+            }
+
+            return currentForm;
+        }
+
+        /// <summary>
         /// Advances Normal Kirby's post-inhale <see cref="SwallowState.Mouthful"/> and <see cref="SwallowState.Swallowing"/>
         /// phases by <paramref name="delta60"/> ticks and returns the <see cref="SpriteTile"/> to render,
         /// or <c>null</c> once the swallow sequence finishes and returns to <see cref="SwallowState.None"/>.
@@ -690,7 +715,26 @@ namespace KirbyTaskbarBuddy {
             ref double swallowAnimTime,
             double delta60,
             FormDef currentForm) {
+            EnemyDef dummyEnemy = null;
+            return AdvanceSwallowState(ref swallowState, ref swallowAnimTime, delta60, ref currentForm, null,
+                ref dummyEnemy);
+        }
+
+        /// <summary>
+        /// Advances Normal Kirby's post-inhale <see cref="SwallowState.Mouthful"/> and <see cref="SwallowState.Swallowing"/>
+        /// phases by <paramref name="delta60"/> ticks, transforms <paramref name="currentForm"/> into the copy ability
+        /// granted by <paramref name="swallowedEnemy"/> once swallowing completes, and returns the <see cref="SpriteTile"/>
+        /// to render (or <c>null</c> once Kirby returns to <see cref="SwallowState.None"/>).
+        /// </summary>
+        internal static SpriteTile AdvanceSwallowState(
+            ref SwallowState swallowState,
+            ref double swallowAnimTime,
+            double delta60,
+            ref FormDef currentForm,
+            IList<FormDef> forms,
+            ref EnemyDef swallowedEnemy) {
             if (currentForm == null) {
+                swallowedEnemy = null;
                 swallowState = SwallowState.None;
                 swallowAnimTime = 0.0;
                 return null;
@@ -716,6 +760,8 @@ namespace KirbyTaskbarBuddy {
 
             if (swallowState == SwallowState.Swallowing) {
                 if (currentForm.Swallow == null || !currentForm.Swallow.HasFrames()) {
+                    currentForm = ResolveSwallowedForm(forms, currentForm, swallowedEnemy);
+                    swallowedEnemy = null;
                     swallowState = SwallowState.None;
                     swallowAnimTime = 0.0;
                     return null;
@@ -728,6 +774,8 @@ namespace KirbyTaskbarBuddy {
                     return currentForm.Swallow.Frames[Math.Max(0, idx)];
                 }
 
+                currentForm = ResolveSwallowedForm(forms, currentForm, swallowedEnemy);
+                swallowedEnemy = null;
                 swallowState = SwallowState.None;
                 swallowAnimTime = 0.0;
                 return null;
@@ -862,7 +910,13 @@ namespace KirbyTaskbarBuddy {
                 }
                 else if (_swallowState == SwallowState.Mouthful || _swallowState == SwallowState.Swallowing) {
                     _activeVfxClip = null;
-                    frameToRender = AdvanceSwallowState(ref _swallowState, ref _swallowAnimTime, delta60, _currentForm);
+                    FormDef prevForm = _currentForm;
+                    frameToRender = AdvanceSwallowState(ref _swallowState, ref _swallowAnimTime, delta60,
+                        ref _currentForm, _forms, ref _swallowedEnemy);
+
+                    if (_currentForm != prevForm) {
+                        _animTime = 0.0;
+                    }
                 }
 
                 if (_swallowState == SwallowState.None) {
@@ -1013,6 +1067,7 @@ namespace KirbyTaskbarBuddy {
 
             if (!remainActive) {
                 if (isBeingInhaled) {
+                    _swallowedEnemy = _activeEnemy;
                     _swallowState = SwallowState.Mouthful;
                     _swallowAnimTime = 0.0;
                     _activeVfxClip = null;
@@ -1186,6 +1241,7 @@ namespace KirbyTaskbarBuddy {
 
             if (!_combatEnabled) {
                 _activeEnemy = null;
+                _swallowedEnemy = null;
                 _lastEnemyRenderedTile = null;
                 _swallowState = SwallowState.None;
                 _swallowAnimTime = 0.0;

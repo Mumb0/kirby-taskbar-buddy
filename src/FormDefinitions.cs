@@ -126,13 +126,14 @@ namespace KirbyTaskbarBuddy {
 
     /// <summary>
     /// Defines an enemy type, its source spritesheet filename, movement speed,
-    /// and its <see cref="AnimClip"/> definitions.
+    /// optional granted copy ability name (<see cref="CopyAbility"/>), and its <see cref="AnimClip"/> definitions.
     /// </summary>
     public sealed class EnemyDef {
 
         public string Name;
         public string FileName;
         public double WalkSpeed;
+        public string CopyAbility;
 
         public AnimClip Walk;
         public AnimClip Inhaled;
@@ -411,6 +412,7 @@ namespace KirbyTaskbarBuddy {
                 Name = "waddle-dee",
                 FileName = "enemy-waddle-dee.png",
                 WalkSpeed = 0.55,
+                CopyAbility = null,
                 Walk = EnemyWalkClip(R(5, 57, 24, 24), R(33, 57, 22, 24)),
                 Inhaled = Clip(new[] { R(59, 57, 24, 24) }, 0.0, false)
             });
@@ -420,6 +422,7 @@ namespace KirbyTaskbarBuddy {
                 Name = "waddle-doo",
                 FileName = "enemy-waddle-dee.png",
                 WalkSpeed = 0.55,
+                CopyAbility = "beam",
                 Walk = EnemyWalkClip(R(5, 84, 24, 24), R(32, 84, 23, 24)),
                 Inhaled = Clip(new[] { R(252, 84, 24, 24) }, 0.0, false)
             });

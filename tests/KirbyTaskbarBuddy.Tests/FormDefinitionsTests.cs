@@ -105,12 +105,19 @@ namespace KirbyTaskbarBuddy.Tests
         [Fact]
         public void PopulateEnemies_RegistersWaddleDeeAndWaddleDooWithValidWalkClipsAndSpeeds()
         {
+            List<FormDef> forms = new List<FormDef>();
+            Dictionary<string, FormDef> keyToForm = new Dictionary<string, FormDef>();
+            FormDef normalForm;
+            FormDefinitions.PopulateForms(forms, keyToForm, out normalForm);
+
             List<EnemyDef> enemies = new List<EnemyDef>();
             FormDefinitions.PopulateEnemies(enemies);
 
             Assert.Equal(2, enemies.Count);
             Assert.Equal("waddle-dee", enemies[0].Name);
+            Assert.Null(enemies[0].CopyAbility);
             Assert.Equal("waddle-doo", enemies[1].Name);
+            Assert.Equal("beam", enemies[1].CopyAbility);
 
             foreach (EnemyDef enemy in enemies)
             {
@@ -119,6 +126,11 @@ namespace KirbyTaskbarBuddy.Tests
                 AssertClipDefinitionValid(enemy.Name, "Walk", enemy.Walk, minRects: 2);
                 Assert.Equal(2, enemy.Walk.SourceRects.Length);
                 AssertClipDefinitionValid(enemy.Name, "Inhaled", enemy.Inhaled, minRects: 1);
+
+                if (!string.IsNullOrEmpty(enemy.CopyAbility))
+                {
+                    Assert.True(forms.Exists(f => f.Name == enemy.CopyAbility));
+                }
             }
         }
 

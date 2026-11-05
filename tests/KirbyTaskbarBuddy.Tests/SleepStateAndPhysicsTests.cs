@@ -391,6 +391,59 @@ namespace KirbyTaskbarBuddy.Tests
         }
 
         [Fact]
+        public void AdvanceSwallowState_TransformsIntoSwallowedEnemyCopyAbility_OrStaysNormalWhenNone()
+        {
+            SpriteTile[] mouthfulTiles = CreateDummyTiles(1);
+            SpriteTile[] swallowTiles = CreateDummyTiles(3);
+            FormDef normalForm = new FormDef
+            {
+                Name = "normal",
+                Key = "0",
+                Mouthful = new AnimClip { Speed = 0.5, Loop = false, RawFrames = mouthfulTiles, Frames = mouthfulTiles },
+                Swallow = new AnimClip { Speed = 0.5, Loop = false, RawFrames = swallowTiles, Frames = swallowTiles }
+            };
+            FormDef beamForm = new FormDef
+            {
+                Name = "beam",
+                Key = "e"
+            };
+            FormDef[] forms = new FormDef[] { normalForm, beamForm };
+
+            EnemyDef waddleDee = new EnemyDef { Name = "waddle-dee", CopyAbility = null };
+            EnemyDef waddleDoo = new EnemyDef { Name = "waddle-doo", CopyAbility = "beam" };
+
+            // 1. Swallowing Waddle Dee (CopyAbility = null) keeps Kirby in Normal form:
+            SwallowState state = SwallowState.Mouthful;
+            double animTime = 0.0;
+            FormDef currentForm = normalForm;
+            EnemyDef swallowedEnemy = waddleDee;
+
+            for (int tick = 0; tick < 50 && state != SwallowState.None; tick++)
+            {
+                KirbyTaskbarBuddyContext.AdvanceSwallowState(ref state, ref animTime, 1.0, ref currentForm, forms, ref swallowedEnemy);
+            }
+
+            Assert.Equal(SwallowState.None, state);
+            Assert.Same(normalForm, currentForm);
+            Assert.Null(swallowedEnemy);
+
+            // 2. Swallowing Waddle Doo (CopyAbility = "beam") transforms Kirby into Beam form:
+            state = SwallowState.Mouthful;
+            animTime = 0.0;
+            currentForm = normalForm;
+            swallowedEnemy = waddleDoo;
+
+            for (int tick = 0; tick < 50 && state != SwallowState.None; tick++)
+            {
+                KirbyTaskbarBuddyContext.AdvanceSwallowState(ref state, ref animTime, 1.0, ref currentForm, forms, ref swallowedEnemy);
+            }
+
+            Assert.Equal(SwallowState.None, state);
+            Assert.Same(beamForm, currentForm);
+            Assert.Null(swallowedEnemy);
+        }
+
+        [Fact]
         public void GetClipFrame_LoopsWhenLoopEnabled_AndClampsToFinalFrameWhenLoopDisabled()
         {
             SpriteTile[] tiles = CreateDummyTiles(3);

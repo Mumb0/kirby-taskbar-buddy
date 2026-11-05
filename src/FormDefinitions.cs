@@ -67,13 +67,19 @@ namespace KirbyTaskbarBuddy {
         /// Aligns an explicit pixel coordinate <c>(CustomPivotX, CustomPivotY)</c> within each frame to <c>(PIVOT_X, PIVOT_Y)</c>.
         /// When <c>CustomPivotY &lt; 0</c>, aligns the bottom row of the source rectangle (<c>Height - 1</c>) to <c>PIVOT_Y</c>.
         /// </summary>
-        CustomPivot,
+        CustomPivot
 
-        /// <summary>
-        /// Synthesizes Normal Kirby's black-and-white inhale air particles spawning at max inhale range
-        /// and flying into Kirby's mouth.
-        /// </summary>
-        InhaleWind
+    }
+
+    /// <summary>
+    /// State of a single black-and-white air particle during Normal Kirby's inhale animation,
+    /// tracked in unscaled 1x pixel offsets (<see cref="Dx"/>, <see cref="Dy"/>) relative to Kirby's open mouth.
+    /// </summary>
+    public struct InhaleParticle {
+
+        public double Dx;
+        public double Dy;
+        public bool BlackOnTop;
 
     }
 
@@ -118,7 +124,6 @@ namespace KirbyTaskbarBuddy {
         public AnimClip Jump;
         public AnimClip Stand;
         public AnimClip Inhale;
-        public AnimClip InhaleVfx;
         public AnimClip Mouthful;
         public AnimClip Swallow;
 
@@ -274,7 +279,6 @@ namespace KirbyTaskbarBuddy {
 
             if (normalForm != null) {
                 normalForm.Inhale = Clip(new[] { R(22, 94, 21, 24), R(48, 86, 21, 32) }, 0.15, false);
-                normalForm.InhaleVfx = Clip(Strip(48, 86, 21, 32, 10, 0), 0.4, true, PivotMode.InhaleWind);
                 normalForm.Mouthful = Clip(new[] { R(111, 87, 32, 31) }, 0.08, false);
                 normalForm.Swallow = Clip(new[] { R(185, 86, 29, 32), R(219, 96, 39, 22), R(263, 102, 23, 16) }, 0.15,
                     false);

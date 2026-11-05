@@ -123,7 +123,6 @@ namespace KirbyTaskbarBuddy {
                     ExpandBounds(form.Jump, ref reqW, ref reqH);
                     ExpandBounds(form.Stand, ref reqW, ref reqH);
                     ExpandBounds(form.Inhale, ref reqW, ref reqH);
-                    ExpandBounds(form.InhaleVfx, ref reqW, ref reqH);
                     ExpandBounds(form.Mouthful, ref reqW, ref reqH);
                     ExpandBounds(form.Swallow, ref reqW, ref reqH);
 
@@ -141,7 +140,6 @@ namespace KirbyTaskbarBuddy {
                         LoadClip(rawSheet, form.Jump, scratch);
                         LoadClip(rawSheet, form.Stand, scratch);
                         LoadClip(rawSheet, form.Inhale, scratch);
-                        LoadClip(rawSheet, form.InhaleVfx, scratch);
                         LoadClip(rawSheet, form.Mouthful, scratch);
                         LoadClip(rawSheet, form.Swallow, scratch);
                     }
@@ -194,9 +192,6 @@ namespace KirbyTaskbarBuddy {
 
             if (clip.Pivot == PivotMode.JumpArc) {
                 clip.RawFrames = ExtractJumpTiles(rawSheet, rects, scratch);
-            }
-            else if (clip.Pivot == PivotMode.InhaleWind) {
-                clip.RawFrames = ExtractInhaleWindTiles(rects.Length, scratch);
             }
             else {
                 clip.RawFrames = new SpriteTile[rects.Length];
@@ -533,6 +528,69 @@ namespace KirbyTaskbarBuddy {
         }
 
         /// <summary>
+        /// Crops the non-transparent bounding box out of the 80x80 scratch buffer into a pre-allocated
+        /// <paramref name="targetTile"/> without allocating a new pixel array on the 60 Hz render loop.
+        /// </summary>
+        internal static SpriteTile BuildSpriteTileInto(int[] scratchTile, SpriteTile targetTile) {
+            if (targetTile == null) {
+                return BuildSpriteTile(scratchTile);
+            }
+
+            int tileSize = NativeMethods.TILE_SIZE;
+            int minX = tileSize, maxX = -1, minY = tileSize, maxY = -1;
+
+            for (int y = 0; y < tileSize; y++) {
+                int row = y * tileSize;
+
+                for (int x = 0; x < tileSize; x++) {
+                    if (scratchTile[row + x] != 0) {
+                        if (x < minX) {
+                            minX = x;
+                        }
+
+                        if (x > maxX) {
+                            maxX = x;
+                        }
+
+                        if (y < minY) {
+                            minY = y;
+                        }
+
+                        if (y > maxY) {
+                            maxY = y;
+                        }
+                    }
+                }
+            }
+
+            if (targetTile.PremulPixels == null || targetTile.PremulPixels.Length < tileSize * tileSize) {
+                targetTile.PremulPixels = new int[tileSize * tileSize];
+            }
+
+            if (maxX < minX || maxY < minY) {
+                targetTile.MinX = 0;
+                targetTile.MinY = 0;
+                targetTile.Width = 1;
+                targetTile.Height = 1;
+                targetTile.PremulPixels[0] = 0;
+                return targetTile;
+            }
+
+            int w = maxX - minX + 1;
+            int h = maxY - minY + 1;
+
+            for (int sy = 0; sy < h; sy++) {
+                Array.Copy(scratchTile, (minY + sy) * tileSize + minX, targetTile.PremulPixels, sy * w, w);
+            }
+
+            targetTile.MinX = minX;
+            targetTile.MinY = minY;
+            targetTile.Width = w;
+            targetTile.Height = h;
+            return targetTile;
+        }
+
+        /// <summary>
         /// Extracts a walk, stand, or guard frame and automatically aligns Kirby's feet to
         /// <c>(PIVOT_X, PIVOT_Y)</c> so abilities with tall hats or wide weapons don't shift his body position.
         /// </summary>
@@ -690,47 +748,39 @@ namespace KirbyTaskbarBuddy {
             return BuildSpriteTile(scratch);
         }
 
+        // With INHALE_VFX_OFFSET_X = 36, Kirby's center is at X = 40 - 36 = 4 and his open mouth edge is at X = 14, Y = 39.
+        internal const int INHALE_MOUTH_X = 14;
+        internal const int INHALE_MOUTH_Y = NativeMethods.PIVOT_Y - 15;
+
         /// <summary>
-        /// Synthesizes SNES Kirby Super Star's 4 black-and-white inhale air particles spawning in an arc
-        /// at max inhale range and accelerating inward into Kirby's open mouth across <paramref name="frameCount"/> frames.
+        /// Rasterizes the currently active inhale air particles (<paramref name="particles"/>) onto the 80x80
+        /// <paramref name="scratch"/> buffer and crops them into a <see cref="SpriteTile"/>.
+        /// Each particle is a 2x4 block (a 2x2 black block stacked with a 2x2 white block) offset from Kirby's mouth.
         /// </summary>
-        private static SpriteTile[] ExtractInhaleWindTiles(int frameCount, int[] scratch) {
-            if (frameCount <= 0) {
+        internal static SpriteTile RenderInhaleParticlesTile(
+            InhaleParticle[] particles,
+            int[] scratch,
+            SpriteTile targetTile = null) {
+            if (particles == null || particles.Length == 0 || scratch == null) {
                 return null;
             }
 
-            SpriteTile[] tiles = new SpriteTile[frameCount];
-
-            // With INHALE_VFX_OFFSET_X = 36, Kirby's center is at X = 40 - 36 = 4 and his open mouth edge is at X = 14, Y = 39.
-            const int mouthX = 14;
-            const int mouthY = NativeMethods.PIVOT_Y - 15;
-
-            int[] startDx = new[] { 46, 52, 52, 46 };
-            int[] startDy = new[] { -20, -7, 7, 20 };
-            bool[] blackOnTop = new[] { true, true, false, false };
+            Array.Clear(scratch, 0, scratch.Length);
 
             int black = MakePremulArgb(255, 0, 0, 0);
             int white = MakePremulArgb(255, 255, 255, 255);
 
-            for (int i = 0; i < frameCount; i++) {
-                Array.Clear(scratch, 0, scratch.Length);
-                double t = frameCount > 1 ? (double)i / (frameCount - 1) : 0.0;
-                double factor = 1.0 - (0.35 * t + 0.60 * t * t);
+            for (int i = 0; i < particles.Length; i++) {
+                int px = INHALE_MOUTH_X + (int)Math.Round(particles[i].Dx);
+                int py = INHALE_MOUTH_Y + (int)Math.Round(particles[i].Dy) - 2;
+                int topColor = particles[i].BlackOnTop ? black : white;
+                int botColor = particles[i].BlackOnTop ? white : black;
 
-                for (int p = 0; p < 4; p++) {
-                    int px = mouthX + (int)Math.Round(startDx[p] * factor);
-                    int py = mouthY + (int)Math.Round(startDy[p] * factor) - 2;
-                    int topColor = blackOnTop[p] ? black : white;
-                    int botColor = blackOnTop[p] ? white : black;
-
-                    Write2x2Block(scratch, px, py, topColor);
-                    Write2x2Block(scratch, px, py + 2, botColor);
-                }
-
-                tiles[i] = BuildSpriteTile(scratch);
+                Write2x2Block(scratch, px, py, topColor);
+                Write2x2Block(scratch, px, py + 2, botColor);
             }
 
-            return tiles;
+            return targetTile != null ? BuildSpriteTileInto(scratch, targetTile) : BuildSpriteTile(scratch);
         }
 
         private static void Write2x2Block(int[] scratch, int x, int y, int color) {

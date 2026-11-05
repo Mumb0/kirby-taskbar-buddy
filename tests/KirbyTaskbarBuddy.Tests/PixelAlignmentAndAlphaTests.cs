@@ -61,10 +61,6 @@ namespace KirbyTaskbarBuddy.Tests
                     {
                         AssertClipPremultipliedAlpha(form.Name, "Inhale", form.Inhale);
                     }
-                    if (form.InhaleVfx != null)
-                    {
-                        AssertClipPremultipliedAlpha(form.Name, "InhaleVfx", form.InhaleVfx);
-                    }
                     if (form.Mouthful != null)
                     {
                         AssertClipPremultipliedAlpha(form.Name, "Mouthful", form.Mouthful);

@@ -38,10 +38,6 @@ namespace KirbyTaskbarBuddy.Tests
                         {
                             AssertRectsWithinBitmap(form.Name, "Inhale", form.Inhale.SourceRects, bmp);
                         }
-                        if (form.InhaleVfx != null)
-                        {
-                            AssertRectsWithinBitmap(form.Name, "InhaleVfx", form.InhaleVfx.SourceRects, bmp);
-                        }
                         if (form.Mouthful != null)
                         {
                             AssertRectsWithinBitmap(form.Name, "Mouthful", form.Mouthful.SourceRects, bmp);
@@ -160,10 +156,6 @@ namespace KirbyTaskbarBuddy.Tests
                     if (form.Inhale != null)
                     {
                         AssertLoadedClipValid(form.Name, "Inhale", form.Inhale, expectedMinFrames: 2);
-                    }
-                    if (form.InhaleVfx != null)
-                    {
-                        AssertLoadedClipValid(form.Name, "InhaleVfx", form.InhaleVfx, expectedMinFrames: 3);
                     }
                     if (form.Mouthful != null)
                     {

@@ -444,6 +444,50 @@ namespace KirbyTaskbarBuddy.Tests
         }
 
         [Fact]
+        public void InhaleParticles_SpawnFourInRectangularArea_MoveTowardMouth_AndRespawnOnDespawn()
+        {
+            System.Random rng = new System.Random(42);
+            InhaleParticle[] particles = new InhaleParticle[KirbyTaskbarBuddyContext.INHALE_PARTICLE_COUNT];
+
+            // 1. Start with 4 particle spawns in the rectangular area in front of Kirby:
+            Assert.Equal(4, particles.Length);
+            KirbyTaskbarBuddyContext.InitInhaleParticles(particles, rng);
+
+            for (int i = 0; i < particles.Length; i++)
+            {
+                Assert.InRange(particles[i].Dx, KirbyTaskbarBuddyContext.INHALE_PARTICLE_MIN_DX, KirbyTaskbarBuddyContext.INHALE_PARTICLE_MAX_DX);
+                Assert.InRange(particles[i].Dy, KirbyTaskbarBuddyContext.INHALE_PARTICLE_MIN_DY, KirbyTaskbarBuddyContext.INHALE_PARTICLE_MAX_DY);
+                Assert.Equal(particles[i].Dy <= 0.0, particles[i].BlackOnTop);
+            }
+
+            // 2. Each step moves particles closer to the mouth (0, 0), and reaching the mouth immediately spawns a new one:
+            particles[0] = new InhaleParticle { Dx = 30.0, Dy = -10.0, BlackOnTop = true };
+            particles[1] = new InhaleParticle { Dx = 1.5, Dy = 0.5, BlackOnTop = false }; // Within 1 tick of mouth -> will despawn & respawn
+
+            double prevDist0 = System.Math.Sqrt(particles[0].Dx * particles[0].Dx + particles[0].Dy * particles[0].Dy);
+            KirbyTaskbarBuddyContext.StepInhaleParticles(particles, 1.0, rng);
+            double nextDist0 = System.Math.Sqrt(particles[0].Dx * particles[0].Dx + particles[0].Dy * particles[0].Dy);
+
+            // Particle 0 moved toward the mouth by INHALE_PARTICLE_SPEED:
+            Assert.Equal(prevDist0 - KirbyTaskbarBuddyContext.INHALE_PARTICLE_SPEED, nextDist0, 5);
+            Assert.True(particles[0].Dx > 0.0 && particles[0].Dy < 0.0);
+
+            // Particle 1 reached the mouth, despawned, and respawned in the rectangular spawn area:
+            Assert.InRange(particles[1].Dx, KirbyTaskbarBuddyContext.INHALE_PARTICLE_MIN_DX, KirbyTaskbarBuddyContext.INHALE_PARTICLE_MAX_DX);
+            Assert.InRange(particles[1].Dy, KirbyTaskbarBuddyContext.INHALE_PARTICLE_MIN_DY, KirbyTaskbarBuddyContext.INHALE_PARTICLE_MAX_DY);
+
+            // 3. RenderInhaleParticlesTile rasterizes the 4 particles into a valid SpriteTile:
+            int[] scratch = new int[NativeMethods.TILE_SIZE * NativeMethods.TILE_SIZE];
+            SpriteTile reusableTile = new SpriteTile { PremulPixels = new int[NativeMethods.TILE_SIZE * NativeMethods.TILE_SIZE] };
+            SpriteTile rendered = SpriteLoader.RenderInhaleParticlesTile(particles, scratch, reusableTile);
+
+            Assert.Same(reusableTile, rendered);
+            Assert.True(rendered.Width >= 2 && rendered.Height >= 4);
+            Assert.InRange(rendered.MinX, 0, NativeMethods.TILE_SIZE - 1);
+            Assert.InRange(rendered.MinY, 0, NativeMethods.TILE_SIZE - 1);
+        }
+
+        [Fact]
         public void GetClipFrame_LoopsWhenLoopEnabled_AndClampsToFinalFrameWhenLoopDisabled()
         {
             SpriteTile[] tiles = CreateDummyTiles(3);

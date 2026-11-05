@@ -38,6 +38,12 @@ namespace KirbyTaskbarBuddy {
         internal const double INHALE_TOUCH_DISTANCE = 8.0;
         internal const double INHALE_VFX_OFFSET_X = 36.0;
         internal const double INHALE_VFX_OFFSET_Y = 0.0;
+        internal const int INHALE_PARTICLE_COUNT = 4;
+        internal const double INHALE_PARTICLE_SPEED = 2.4;
+        internal const double INHALE_PARTICLE_MIN_DX = 12.0;
+        internal const double INHALE_PARTICLE_MAX_DX = 52.0;
+        internal const double INHALE_PARTICLE_MIN_DY = -20.0;
+        internal const double INHALE_PARTICLE_MAX_DY = 20.0;
         internal static readonly double[] SleepTimeoutValues = new[] { 10.0, 30.0, 60.0, 180.0, 300.0, 600.0, -1.0 };
 
         // Static reference to the hook delegate prevents the GC from collecting the callback while unmanaged code holds it.
@@ -98,6 +104,18 @@ namespace KirbyTaskbarBuddy {
         private EnemyDef _swallowedEnemy;
 
         private readonly KirbyOverlayWindow _vfxOverlay;
+        private readonly InhaleParticle[] _inhaleParticles = new InhaleParticle[INHALE_PARTICLE_COUNT];
+        private readonly int[] _inhaleVfxScratch = new int[NativeMethods.TILE_SIZE * NativeMethods.TILE_SIZE];
+        private readonly SpriteTile _inhaleVfxTileA = new SpriteTile
+        {
+            PremulPixels = new int[NativeMethods.TILE_SIZE * NativeMethods.TILE_SIZE]
+        };
+        private readonly SpriteTile _inhaleVfxTileB = new SpriteTile
+        {
+            PremulPixels = new int[NativeMethods.TILE_SIZE * NativeMethods.TILE_SIZE]
+        };
+        private bool _useInhaleTileB;
+        private SpriteTile _activeVfxTile;
         private AnimClip _activeVfxClip;
         private double _vfxX;
         private double _vfxY;
@@ -777,6 +795,64 @@ namespace KirbyTaskbarBuddy {
         }
 
         /// <summary>
+        /// Spawns a single inhale wind particle at a random position within the rectangular inhale area
+        /// in front of Kirby's mouth (<c>[INHALE_PARTICLE_MIN_DX, INHALE_PARTICLE_MAX_DX] x [INHALE_PARTICLE_MIN_DY, INHALE_PARTICLE_MAX_DY]</c>).
+        /// </summary>
+        internal static InhaleParticle SpawnInhaleParticle(Random rng) {
+            double rx = rng != null ? rng.NextDouble() : 0.5;
+            double ry = rng != null ? rng.NextDouble() : 0.5;
+            double dx = INHALE_PARTICLE_MIN_DX + rx * (INHALE_PARTICLE_MAX_DX - INHALE_PARTICLE_MIN_DX);
+            double dy = INHALE_PARTICLE_MIN_DY + ry * (INHALE_PARTICLE_MAX_DY - INHALE_PARTICLE_MIN_DY);
+            return new InhaleParticle
+            {
+                Dx = dx,
+                Dy = dy,
+                BlackOnTop = dy <= 0.0
+            };
+        }
+
+        /// <summary>
+        /// Spawns all initial (<see cref="INHALE_PARTICLE_COUNT"/> = 4) inhale wind particles at random positions
+        /// in the rectangular area in front of Kirby when the inhale animation starts.
+        /// </summary>
+        internal static void InitInhaleParticles(InhaleParticle[] particles, Random rng) {
+            if (particles == null) {
+                return;
+            }
+
+            for (int i = 0; i < particles.Length; i++) {
+                particles[i] = SpawnInhaleParticle(rng);
+            }
+        }
+
+        /// <summary>
+        /// Moves each individual inhale particle straight toward Kirby's mouth (<c>Dx = 0, Dy = 0</c>) by
+        /// <c>INHALE_PARTICLE_SPEED * delta60</c>. As soon as a particle reaches the mouth and despawns,
+        /// a new particle is immediately spawned at a random position in the rectangular inhale area.
+        /// </summary>
+        internal static void StepInhaleParticles(InhaleParticle[] particles, double delta60, Random rng) {
+            if (particles == null || delta60 <= 0.0) {
+                return;
+            }
+
+            double step = INHALE_PARTICLE_SPEED * delta60;
+
+            for (int i = 0; i < particles.Length; i++) {
+                double dx = particles[i].Dx;
+                double dy = particles[i].Dy;
+                double dist = Math.Sqrt(dx * dx + dy * dy);
+
+                if (dist <= step || dist <= 1.0) {
+                    particles[i] = SpawnInhaleParticle(rng);
+                }
+                else {
+                    particles[i].Dx = dx - dx / dist * step;
+                    particles[i].Dy = dy - dy / dist * step;
+                }
+            }
+        }
+
+        /// <summary>
         /// Resolves the <see cref="FormDef"/> Kirby should transform into after swallowing <paramref name="swallowedEnemy"/>.
         /// Returns the matching ability form if <see cref="EnemyDef.CopyAbility"/> is defined and registered in <paramref name="forms"/>,
         /// or <paramref name="currentForm"/> if the enemy grants no ability.
@@ -978,12 +1054,16 @@ namespace KirbyTaskbarBuddy {
                     return;
                 }
 
+                bool startedInhaleThisTick = false;
+
                 if (_swallowState == SwallowState.None &&
                     CanStartInhale(_currentForm, _sleepState, _isJumping, _swallowState, _activeEnemy, _kirbyX, _enemyX,
                         _scale)) {
                     _swallowState = SwallowState.Inhaling;
                     _swallowAnimTime = 0.0;
                     _vfxAnimTime = 0.0;
+                    InitInhaleParticles(_inhaleParticles, _rng);
+                    startedInhaleThisTick = true;
                 }
 
                 if (_swallowState == SwallowState.Inhaling) {
@@ -991,24 +1071,28 @@ namespace KirbyTaskbarBuddy {
                         _currentForm.Inhale == null || !_currentForm.Inhale.HasFrames()) {
                         _swallowState = SwallowState.None;
                         _swallowAnimTime = 0.0;
+                        _activeVfxTile = null;
                         _activeVfxClip = null;
                     }
                     else {
                         _swallowAnimTime += _currentForm.Inhale.Speed * delta60;
                         frameToRender = GetClipFrame(_currentForm.Inhale, _swallowAnimTime);
 
-                        if (_currentForm.InhaleVfx != null && _currentForm.InhaleVfx.HasFrames()) {
-                            _activeVfxClip = _currentForm.InhaleVfx;
-                            _vfxX = _kirbyX + INHALE_VFX_OFFSET_X * _scale;
-                            _vfxY = INHALE_VFX_OFFSET_Y;
-                            _vfxAnimTime += _activeVfxClip.Speed * delta60;
+                        if (!startedInhaleThisTick) {
+                            StepInhaleParticles(_inhaleParticles, delta60, _rng);
                         }
-                        else {
-                            _activeVfxClip = null;
-                        }
+
+                        _useInhaleTileB = !_useInhaleTileB;
+                        SpriteTile targetVfxTile = _useInhaleTileB ? _inhaleVfxTileB : _inhaleVfxTileA;
+                        _activeVfxTile = SpriteLoader.RenderInhaleParticlesTile(_inhaleParticles, _inhaleVfxScratch,
+                            targetVfxTile);
+                        _activeVfxClip = null;
+                        _vfxX = _kirbyX + INHALE_VFX_OFFSET_X * _scale;
+                        _vfxY = INHALE_VFX_OFFSET_Y;
                     }
                 }
                 else if (_swallowState == SwallowState.Mouthful || _swallowState == SwallowState.Swallowing) {
+                    _activeVfxTile = null;
                     _activeVfxClip = null;
                     FormDef prevForm = _currentForm;
                     frameToRender = AdvanceSwallowState(ref _swallowState, ref _swallowAnimTime, delta60,
@@ -1020,6 +1104,7 @@ namespace KirbyTaskbarBuddy {
                 }
 
                 if (_swallowState == SwallowState.None) {
+                    _activeVfxTile = null;
                     _activeVfxClip = null;
 
                     // Check if mouse pointer is close to Kirby's body on the taskbar (only guards when on the ground).
@@ -1055,6 +1140,7 @@ namespace KirbyTaskbarBuddy {
                 }
             }
             else {
+                _activeVfxTile = null;
                 _activeVfxClip = null;
             }
 
@@ -1108,7 +1194,7 @@ namespace KirbyTaskbarBuddy {
                 return;
             }
 
-            SpriteTile vfxTile = GetVfxFrame(_activeVfxClip, _vfxAnimTime);
+            SpriteTile vfxTile = _activeVfxTile ?? GetVfxFrame(_activeVfxClip, _vfxAnimTime);
 
             if (vfxTile == null) {
                 if (!_vfxOverlay.IsCleared) {
@@ -1170,6 +1256,7 @@ namespace KirbyTaskbarBuddy {
                     _swallowedEnemy = _activeEnemy;
                     _swallowState = SwallowState.Mouthful;
                     _swallowAnimTime = 0.0;
+                    _activeVfxTile = null;
                     _activeVfxClip = null;
                 }
 
@@ -1354,6 +1441,7 @@ namespace KirbyTaskbarBuddy {
                 _lastEnemyRenderedTile = null;
                 _swallowState = SwallowState.None;
                 _swallowAnimTime = 0.0;
+                _activeVfxTile = null;
                 _activeVfxClip = null;
                 _lastVfxRenderedTile = null;
 

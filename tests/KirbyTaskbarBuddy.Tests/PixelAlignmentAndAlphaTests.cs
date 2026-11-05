@@ -65,11 +65,23 @@ namespace KirbyTaskbarBuddy.Tests
                     {
                         AssertClipPremultipliedAlpha(form.Name, "InhaleVfx", form.InhaleVfx);
                     }
+                    if (form.Mouthful != null)
+                    {
+                        AssertClipPremultipliedAlpha(form.Name, "Mouthful", form.Mouthful);
+                    }
+                    if (form.Swallow != null)
+                    {
+                        AssertClipPremultipliedAlpha(form.Name, "Swallow", form.Swallow);
+                    }
                 }
 
                 foreach (EnemyDef enemy in enemies)
                 {
                     AssertClipPremultipliedAlpha(enemy.Name, "Walk", enemy.Walk);
+                    if (enemy.Inhaled != null)
+                    {
+                        AssertClipPremultipliedAlpha(enemy.Name, "Inhaled", enemy.Inhaled);
+                    }
                 }
 
                 for (int i = 0; i < sleepFrames.Length; i++)
@@ -111,6 +123,14 @@ namespace KirbyTaskbarBuddy.Tests
                     {
                         AssertFeetAlignedToFloor(form.Name, "Inhale", form.Inhale.RawFrames);
                     }
+                    if (form.Mouthful != null)
+                    {
+                        AssertFeetAlignedToFloor(form.Name, "Mouthful", form.Mouthful.RawFrames);
+                    }
+                    if (form.Swallow != null)
+                    {
+                        AssertFeetAlignedToFloor(form.Name, "Swallow", form.Swallow.RawFrames);
+                    }
 
                     if (form.Guard.Pivot == PivotMode.MirrorGuard)
                     {
@@ -131,6 +151,10 @@ namespace KirbyTaskbarBuddy.Tests
                 foreach (EnemyDef enemy in enemies)
                 {
                     AssertFeetAlignedToFloor(enemy.Name, "Walk", enemy.Walk.RawFrames);
+                    if (enemy.Inhaled != null)
+                    {
+                        AssertFeetAlignedToFloor(enemy.Name, "Inhaled", enemy.Inhaled.RawFrames);
+                    }
                 }
 
                 for (int i = 0; i < sleepFrames.Length; i++)

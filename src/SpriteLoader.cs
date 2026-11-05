@@ -119,6 +119,8 @@ namespace KirbyTaskbarBuddy {
                     ExpandBounds(form.Stand, ref reqW, ref reqH);
                     ExpandBounds(form.Inhale, ref reqW, ref reqH);
                     ExpandBounds(form.InhaleVfx, ref reqW, ref reqH);
+                    ExpandBounds(form.Mouthful, ref reqW, ref reqH);
+                    ExpandBounds(form.Swallow, ref reqW, ref reqH);
 
                     using (FastSheet rawSheet = OpenSpriteSheet(form.FileName, reqW, reqH)) {
                         if (rawSheet == null) {
@@ -135,6 +137,8 @@ namespace KirbyTaskbarBuddy {
                         LoadClip(rawSheet, form.Stand, scratch);
                         LoadClip(rawSheet, form.Inhale, scratch);
                         LoadClip(rawSheet, form.InhaleVfx, scratch);
+                        LoadClip(rawSheet, form.Mouthful, scratch);
+                        LoadClip(rawSheet, form.Swallow, scratch);
                     }
                 }
             }
@@ -143,6 +147,7 @@ namespace KirbyTaskbarBuddy {
                 foreach (EnemyDef enemy in enemies) {
                     int reqW = 64, reqH = 96;
                     ExpandBounds(enemy.Walk, ref reqW, ref reqH);
+                    ExpandBounds(enemy.Inhaled, ref reqW, ref reqH);
 
                     using (FastSheet rawSheet = OpenSpriteSheet(enemy.FileName, reqW, reqH)) {
                         if (rawSheet == null) {
@@ -150,6 +155,7 @@ namespace KirbyTaskbarBuddy {
                         }
 
                         LoadClip(rawSheet, enemy.Walk, scratch);
+                        LoadClip(rawSheet, enemy.Inhaled, scratch);
                     }
                 }
             }

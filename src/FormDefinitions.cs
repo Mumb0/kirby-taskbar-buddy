@@ -24,7 +24,9 @@ namespace KirbyTaskbarBuddy {
     public enum SwallowState {
 
         None,
-        Inhaling
+        Inhaling,
+        Mouthful,
+        Swallowing
 
     }
 
@@ -117,6 +119,8 @@ namespace KirbyTaskbarBuddy {
         public AnimClip Stand;
         public AnimClip Inhale;
         public AnimClip InhaleVfx;
+        public AnimClip Mouthful;
+        public AnimClip Swallow;
 
     }
 
@@ -131,6 +135,7 @@ namespace KirbyTaskbarBuddy {
         public double WalkSpeed;
 
         public AnimClip Walk;
+        public AnimClip Inhaled;
 
     }
 
@@ -269,6 +274,9 @@ namespace KirbyTaskbarBuddy {
             if (normalForm != null) {
                 normalForm.Inhale = Clip(new[] { R(22, 94, 21, 24), R(48, 86, 21, 32) }, 0.15, false);
                 normalForm.InhaleVfx = Clip(Strip(48, 86, 21, 32, 10, 0), 0.4, true, PivotMode.InhaleWind);
+                normalForm.Mouthful = Clip(new[] { R(111, 87, 32, 31) }, 0.08, false);
+                normalForm.Swallow = Clip(new[] { R(185, 86, 29, 32), R(219, 96, 39, 22), R(263, 102, 23, 16) }, 0.15,
+                    false);
             }
 
             AddForm(forms, keyToForm, ref normalForm, "ice", "l", "kirby-ice.png",
@@ -403,7 +411,8 @@ namespace KirbyTaskbarBuddy {
                 Name = "waddle-dee",
                 FileName = "enemy-waddle-dee.png",
                 WalkSpeed = 0.55,
-                Walk = EnemyWalkClip(R(5, 57, 24, 24), R(33, 57, 22, 24))
+                Walk = EnemyWalkClip(R(5, 57, 24, 24), R(33, 57, 22, 24)),
+                Inhaled = Clip(new[] { R(59, 57, 24, 24) }, 0.0, false)
             });
 
             enemies.Add(new EnemyDef
@@ -411,7 +420,8 @@ namespace KirbyTaskbarBuddy {
                 Name = "waddle-doo",
                 FileName = "enemy-waddle-dee.png",
                 WalkSpeed = 0.55,
-                Walk = EnemyWalkClip(R(5, 84, 24, 24), R(32, 84, 23, 24))
+                Walk = EnemyWalkClip(R(5, 84, 24, 24), R(32, 84, 23, 24)),
+                Inhaled = Clip(new[] { R(252, 84, 24, 24) }, 0.0, false)
             });
         }
 

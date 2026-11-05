@@ -30,7 +30,9 @@ namespace KirbyTaskbarBuddy {
         internal const double JUMP_GRAVITY = 0.18;
         internal const double ENEMY_SPAWN_MIN_SECONDS = 5.0;
         internal const double ENEMY_SPAWN_MAX_SECONDS = 10.0;
-        internal const double INHALE_RANGE = 72.0;
+        internal const double INHALE_RANGE = 80.0;
+        internal const double INHALE_PULL_SPEED = 2.0;
+        internal const double INHALE_TOUCH_DISTANCE = 8.0;
         internal const double INHALE_VFX_OFFSET_X = 36.0;
         internal const double INHALE_VFX_OFFSET_Y = 0.0;
         internal static readonly double[] SleepTimeoutValues = new[] { 10.0, 30.0, 60.0, 180.0, 300.0, 600.0, -1.0 };
@@ -557,6 +559,35 @@ namespace KirbyTaskbarBuddy {
         }
 
         /// <summary>
+        /// Pulls an inhaled enemy rapidly toward Kirby's mouth (<paramref name="kirbyX"/>).
+        /// Returns <c>true</c> while the enemy is still flying toward Kirby, or <c>false</c>
+        /// once the enemy reaches Kirby (<c>enemyX &lt;= kirbyX + INHALE_TOUCH_DISTANCE * scale</c>).
+        /// </summary>
+        internal static bool StepInhaledEnemyPhysics(
+            ref double enemyX,
+            ref double enemyAnimTime,
+            EnemyDef enemyDef,
+            double kirbyX,
+            double delta60,
+            int scale) {
+            if (enemyDef == null) {
+                return false;
+            }
+
+            AnimClip activeClip = enemyDef.Inhaled != null && enemyDef.Inhaled.HasFrames()
+                ? enemyDef.Inhaled
+                : enemyDef.Walk;
+
+            if (activeClip == null || !activeClip.HasFrames()) {
+                return false;
+            }
+
+            enemyX -= INHALE_PULL_SPEED * scale * delta60;
+            enemyAnimTime += activeClip.Speed * delta60;
+            return enemyX > kirbyX + INHALE_TOUCH_DISTANCE * scale;
+        }
+
+        /// <summary>
         /// Resolves the <see cref="SpriteTile"/> for <paramref name="clip"/> at <paramref name="animTime"/>,
         /// wrapping modulo frame count when <see cref="AnimClip.Loop"/> is <c>true</c> or clamping to the last frame when <c>false</c>.
         /// </summary>
@@ -647,6 +678,62 @@ namespace KirbyTaskbarBuddy {
 
             double dist = enemyX - kirbyX;
             return dist >= 0.0 && dist <= INHALE_RANGE * scale;
+        }
+
+        /// <summary>
+        /// Advances Normal Kirby's post-inhale <see cref="SwallowState.Mouthful"/> and <see cref="SwallowState.Swallowing"/>
+        /// phases by <paramref name="delta60"/> ticks and returns the <see cref="SpriteTile"/> to render,
+        /// or <c>null</c> once the swallow sequence finishes and returns to <see cref="SwallowState.None"/>.
+        /// </summary>
+        internal static SpriteTile AdvanceSwallowState(
+            ref SwallowState swallowState,
+            ref double swallowAnimTime,
+            double delta60,
+            FormDef currentForm) {
+            if (currentForm == null) {
+                swallowState = SwallowState.None;
+                swallowAnimTime = 0.0;
+                return null;
+            }
+
+            if (swallowState == SwallowState.Mouthful) {
+                if (currentForm.Mouthful == null || !currentForm.Mouthful.HasFrames()) {
+                    swallowState = SwallowState.Swallowing;
+                    swallowAnimTime = 0.0;
+                }
+                else {
+                    swallowAnimTime += currentForm.Mouthful.Speed * delta60;
+                    int idx = (int)Math.Floor(swallowAnimTime);
+
+                    if (idx < currentForm.Mouthful.Frames.Length) {
+                        return currentForm.Mouthful.Frames[Math.Max(0, idx)];
+                    }
+
+                    swallowState = SwallowState.Swallowing;
+                    swallowAnimTime = 0.0;
+                }
+            }
+
+            if (swallowState == SwallowState.Swallowing) {
+                if (currentForm.Swallow == null || !currentForm.Swallow.HasFrames()) {
+                    swallowState = SwallowState.None;
+                    swallowAnimTime = 0.0;
+                    return null;
+                }
+
+                swallowAnimTime += currentForm.Swallow.Speed * delta60;
+                int idx = (int)Math.Floor(swallowAnimTime);
+
+                if (idx < currentForm.Swallow.Frames.Length) {
+                    return currentForm.Swallow.Frames[Math.Max(0, idx)];
+                }
+
+                swallowState = SwallowState.None;
+                swallowAnimTime = 0.0;
+                return null;
+            }
+
+            return null;
         }
 
         /// <summary>
@@ -772,6 +859,10 @@ namespace KirbyTaskbarBuddy {
                             _activeVfxClip = null;
                         }
                     }
+                }
+                else if (_swallowState == SwallowState.Mouthful || _swallowState == SwallowState.Swallowing) {
+                    _activeVfxClip = null;
+                    frameToRender = AdvanceSwallowState(ref _swallowState, ref _swallowAnimTime, delta60, _currentForm);
                 }
 
                 if (_swallowState == SwallowState.None) {
@@ -915,8 +1006,18 @@ namespace KirbyTaskbarBuddy {
             }
 
             int despawnLeftX = workArea.Left - halfWidth;
+            bool isBeingInhaled = _swallowState == SwallowState.Inhaling;
+            bool remainActive = isBeingInhaled
+                ? StepInhaledEnemyPhysics(ref _enemyX, ref _enemyAnimTime, _activeEnemy, _kirbyX, delta60, _scale)
+                : StepEnemyPhysics(ref _enemyX, ref _enemyAnimTime, _activeEnemy, delta60, _scale, despawnLeftX);
 
-            if (!StepEnemyPhysics(ref _enemyX, ref _enemyAnimTime, _activeEnemy, delta60, _scale, despawnLeftX)) {
+            if (!remainActive) {
+                if (isBeingInhaled) {
+                    _swallowState = SwallowState.Mouthful;
+                    _swallowAnimTime = 0.0;
+                    _activeVfxClip = null;
+                }
+
                 _activeEnemy = null;
                 _lastEnemyRenderedTile = null;
 
@@ -928,15 +1029,10 @@ namespace KirbyTaskbarBuddy {
                 return;
             }
 
-            SpriteTile[] enemyFrames = _activeEnemy.Walk.Frames;
-            int frameCount = enemyFrames.Length;
-            int frameIdx = (int)Math.Floor(_enemyAnimTime) % frameCount;
-
-            if (frameIdx < 0) {
-                frameIdx += frameCount;
-            }
-
-            SpriteTile enemyTile = enemyFrames[frameIdx];
+            AnimClip enemyClip = isBeingInhaled && _activeEnemy.Inhaled != null && _activeEnemy.Inhaled.HasFrames()
+                ? _activeEnemy.Inhaled
+                : _activeEnemy.Walk;
+            SpriteTile enemyTile = GetClipFrame(enemyClip, _enemyAnimTime);
 
             int enemyScreenX = (int)Math.Round(_enemyX) - halfWidth;
             int enemyScreenY = workArea.Bottom - (NativeMethods.PIVOT_Y + 1) * _scale;

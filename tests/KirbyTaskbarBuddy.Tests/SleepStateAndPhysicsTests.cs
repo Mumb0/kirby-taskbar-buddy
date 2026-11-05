@@ -268,6 +268,45 @@ namespace KirbyTaskbarBuddy.Tests
         }
 
         [Fact]
+        public void StepInhaledEnemyPhysics_PullsEnemyRapidlyTowardKirby_AndSignalsTouchAtThreshold()
+        {
+            SpriteTile[] inhaledTiles = CreateDummyTiles(1);
+            EnemyDef enemy = new EnemyDef
+            {
+                Name = "waddle-dee",
+                WalkSpeed = 0.55,
+                Inhaled = new AnimClip
+                {
+                    Speed = 0.0,
+                    RawFrames = inhaledTiles,
+                    Frames = inhaledTiles
+                }
+            };
+
+            double kirbyX = 100.0;
+            double enemyX = 240.0;
+            double animTime = 0.0;
+            int scale = 2;
+
+            // Single 60Hz tick at 2x scale pulls enemy left by INHALE_PULL_SPEED * 2 = 6.0px.
+            bool stillFlying = KirbyTaskbarBuddyContext.StepInhaledEnemyPhysics(ref enemyX, ref animTime, enemy, kirbyX, 1.0, scale);
+            Assert.True(stillFlying);
+            Assert.Equal(240.0 - KirbyTaskbarBuddyContext.INHALE_PULL_SPEED * scale, enemyX, 5);
+
+            // Step until enemy reaches Kirby's touch threshold (kirbyX + INHALE_TOUCH_DISTANCE * scale = 116.0).
+            int ticks = 0;
+            while (stillFlying && ticks < 100)
+            {
+                stillFlying = KirbyTaskbarBuddyContext.StepInhaledEnemyPhysics(ref enemyX, ref animTime, enemy, kirbyX, 1.0, scale);
+                ticks++;
+            }
+
+            Assert.False(stillFlying);
+            Assert.True(enemyX <= kirbyX + KirbyTaskbarBuddyContext.INHALE_TOUCH_DISTANCE * scale);
+            Assert.False(KirbyTaskbarBuddyContext.StepInhaledEnemyPhysics(ref enemyX, ref animTime, null, kirbyX, 1.0, scale));
+        }
+
+        [Fact]
         public void CanStartInhale_RequiresNormalFormAwakeGroundedAndEnemyWithinScaledRange()
         {
             SpriteTile[] inhaleTiles = CreateDummyTiles(2);
@@ -285,11 +324,12 @@ namespace KirbyTaskbarBuddy.Tests
             };
             EnemyDef enemy = new EnemyDef { Name = "waddle-dee" };
 
-            // In range in front of Normal Kirby at 2x scale (max distance = 72 * 2 = 144px):
-            Assert.True(KirbyTaskbarBuddyContext.CanStartInhale(normalForm, SleepState.Awake, false, SwallowState.None, enemy, 100.0, 244.0, 2));
+            // In range in front of Normal Kirby at 2x scale (max distance = INHALE_RANGE * 2):
+            double maxInhaleX = 100.0 + KirbyTaskbarBuddyContext.INHALE_RANGE * 2;
+            Assert.True(KirbyTaskbarBuddyContext.CanStartInhale(normalForm, SleepState.Awake, false, SwallowState.None, enemy, 100.0, maxInhaleX, 2));
 
-            // Out of range (145px > 144px at 2x scale):
-            Assert.False(KirbyTaskbarBuddyContext.CanStartInhale(normalForm, SleepState.Awake, false, SwallowState.None, enemy, 100.0, 245.0, 2));
+            // Out of range (exceeds INHALE_RANGE * 2):
+            Assert.False(KirbyTaskbarBuddyContext.CanStartInhale(normalForm, SleepState.Awake, false, SwallowState.None, enemy, 100.0, maxInhaleX + 1.0, 2));
 
             // Enemy already behind Kirby (enemyX < kirbyX):
             Assert.False(KirbyTaskbarBuddyContext.CanStartInhale(normalForm, SleepState.Awake, false, SwallowState.None, enemy, 100.0, 99.0, 2));
@@ -300,6 +340,54 @@ namespace KirbyTaskbarBuddy.Tests
             Assert.False(KirbyTaskbarBuddyContext.CanStartInhale(normalForm, SleepState.Awake, true, SwallowState.None, enemy, 100.0, 140.0, 2));
             Assert.False(KirbyTaskbarBuddyContext.CanStartInhale(normalForm, SleepState.Awake, false, SwallowState.Inhaling, enemy, 100.0, 140.0, 2));
             Assert.False(KirbyTaskbarBuddyContext.CanStartInhale(normalForm, SleepState.Awake, false, SwallowState.None, null, 100.0, 140.0, 2));
+        }
+
+        [Fact]
+        public void AdvanceSwallowState_ProgressesFromMouthfulToSwallowingToNone()
+        {
+            SpriteTile[] mouthfulTiles = CreateDummyTiles(1);
+            SpriteTile[] swallowTiles = CreateDummyTiles(3);
+            FormDef normalForm = new FormDef
+            {
+                Name = "normal",
+                Key = "0",
+                Mouthful = new AnimClip { Speed = 0.08, Loop = false, RawFrames = mouthfulTiles, Frames = mouthfulTiles },
+                Swallow = new AnimClip { Speed = 0.15, Loop = false, RawFrames = swallowTiles, Frames = swallowTiles }
+            };
+
+            SwallowState state = SwallowState.Mouthful;
+            double animTime = 0.0;
+
+            // Step through Mouthful until it transitions to Swallowing:
+            SpriteTile frame = null;
+            int mouthfulTicks = 0;
+            while (state == SwallowState.Mouthful && mouthfulTicks < 100)
+            {
+                frame = KirbyTaskbarBuddyContext.AdvanceSwallowState(ref state, ref animTime, 1.0, normalForm);
+                Assert.NotNull(frame);
+                mouthfulTicks++;
+            }
+
+            Assert.Equal(SwallowState.Swallowing, state);
+            Assert.Same(swallowTiles[0], frame);
+            Assert.True(mouthfulTicks > 10, "Mouthful should hold for multiple frames before swallowing");
+
+            // Step through Swallowing across all 3 frames until it returns to SwallowState.None:
+            bool sawFrame1 = false;
+            bool sawFrame2 = false;
+            int swallowTicks = 0;
+            while (state == SwallowState.Swallowing && swallowTicks < 100)
+            {
+                frame = KirbyTaskbarBuddyContext.AdvanceSwallowState(ref state, ref animTime, 1.0, normalForm);
+                if (ReferenceEquals(frame, swallowTiles[1])) sawFrame1 = true;
+                if (ReferenceEquals(frame, swallowTiles[2])) sawFrame2 = true;
+                swallowTicks++;
+            }
+
+            Assert.Equal(SwallowState.None, state);
+            Assert.Equal(0.0, animTime);
+            Assert.Null(frame);
+            Assert.True(sawFrame1 && sawFrame2, "Swallow animation should advance through frames 1 and 2");
         }
 
         [Fact]

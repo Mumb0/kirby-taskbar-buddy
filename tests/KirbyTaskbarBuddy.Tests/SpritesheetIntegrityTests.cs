@@ -42,6 +42,14 @@ namespace KirbyTaskbarBuddy.Tests
                         {
                             AssertRectsWithinBitmap(form.Name, "InhaleVfx", form.InhaleVfx.SourceRects, bmp);
                         }
+                        if (form.Mouthful != null)
+                        {
+                            AssertRectsWithinBitmap(form.Name, "Mouthful", form.Mouthful.SourceRects, bmp);
+                        }
+                        if (form.Swallow != null)
+                        {
+                            AssertRectsWithinBitmap(form.Name, "Swallow", form.Swallow.SourceRects, bmp);
+                        }
 
                         if (form.Guard.Pivot == PivotMode.MirrorGuard)
                         {
@@ -64,6 +72,10 @@ namespace KirbyTaskbarBuddy.Tests
                     using (Bitmap bmp = new Bitmap(stream))
                     {
                         AssertRectsWithinBitmap(enemy.Name, "Walk", enemy.Walk.SourceRects, bmp);
+                        if (enemy.Inhaled != null)
+                        {
+                            AssertRectsWithinBitmap(enemy.Name, "Inhaled", enemy.Inhaled.SourceRects, bmp);
+                        }
                     }
                 }
             }
@@ -153,11 +165,23 @@ namespace KirbyTaskbarBuddy.Tests
                     {
                         AssertLoadedClipValid(form.Name, "InhaleVfx", form.InhaleVfx, expectedMinFrames: 3);
                     }
+                    if (form.Mouthful != null)
+                    {
+                        AssertLoadedClipValid(form.Name, "Mouthful", form.Mouthful, expectedMinFrames: 1);
+                    }
+                    if (form.Swallow != null)
+                    {
+                        AssertLoadedClipValid(form.Name, "Swallow", form.Swallow, expectedMinFrames: 3);
+                    }
                 }
 
                 foreach (EnemyDef enemy in enemies)
                 {
                     AssertLoadedClipValid(enemy.Name, "Walk", enemy.Walk, expectedMinFrames: 2);
+                    if (enemy.Inhaled != null)
+                    {
+                        AssertLoadedClipValid(enemy.Name, "Inhaled", enemy.Inhaled, expectedMinFrames: 1);
+                    }
                 }
 
                 Assert.NotNull(sleepFrames);

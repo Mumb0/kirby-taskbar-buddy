@@ -2,8 +2,11 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
+using System.Globalization;
+using System.IO;
 using System.Reflection;
 using System.Runtime.InteropServices;
+using System.Security;
 using System.Text;
 using System.Windows.Forms;
 using Microsoft.Win32;
@@ -194,7 +197,8 @@ namespace KirbyTaskbarBuddy {
                 Visible = true
             };
 
-            _cachedWorkArea = Screen.PrimaryScreen.WorkingArea;
+            Screen primaryScreen = Screen.PrimaryScreen;
+            _cachedWorkArea = primaryScreen != null ? primaryScreen.WorkingArea : new Rectangle(0, 0, 1920, 1080);
 
             // Initialize layered surfaces (SourceConstantAlpha = 0 off-screen) before calling Show()
             // so Windows/DWM never maps an uninitialized layered HWND, ordered back-to-front:
@@ -267,34 +271,114 @@ namespace KirbyTaskbarBuddy {
             return 300.0;
         }
 
+        /// <summary>
+        /// Safely parses a registry value (<c>REG_DWORD</c>, <c>REG_QWORD</c>, or <c>REG_SZ</c>) as a 32-bit integer
+        /// without throwing exceptions on missing or corrupted data.
+        /// </summary>
+        internal static bool TryParseRegistryInt(object rawValue, out int result) {
+            result = 0;
+
+            if (rawValue == null) {
+                return false;
+            }
+
+            if (rawValue is int) {
+                result = (int)rawValue;
+                return true;
+            }
+
+            if (rawValue is long) {
+                long longVal = (long)rawValue;
+
+                if (longVal >= int.MinValue && longVal <= int.MaxValue) {
+                    result = (int)longVal;
+                    return true;
+                }
+
+                return false;
+            }
+
+            string strVal = rawValue as string;
+
+            if (strVal != null) {
+                return int.TryParse(strVal, NumberStyles.Integer, CultureInfo.InvariantCulture, out result);
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// Safely parses a registry value (<c>REG_DWORD</c>, <c>REG_QWORD</c>, or <c>REG_SZ</c>) as a double
+        /// without throwing exceptions on missing or corrupted data.
+        /// </summary>
+        internal static bool TryParseRegistryDouble(object rawValue, out double result) {
+            result = 0.0;
+
+            if (rawValue == null) {
+                return false;
+            }
+
+            if (rawValue is int) {
+                result = (int)rawValue;
+                return true;
+            }
+
+            if (rawValue is long) {
+                result = (long)rawValue;
+                return true;
+            }
+
+            if (rawValue is double) {
+                result = (double)rawValue;
+                return true;
+            }
+
+            string strVal = rawValue as string;
+
+            if (strVal != null) {
+                return double.TryParse(strVal, NumberStyles.Float | NumberStyles.AllowThousands,
+                    CultureInfo.InvariantCulture, out result);
+            }
+
+            return false;
+        }
+
         private void LoadSettings() {
             try {
                 using (RegistryKey key = Registry.CurrentUser.OpenSubKey(SETTINGS_REG_KEY, false)) {
                     if (key != null) {
-                        object rawScale = key.GetValue(REG_VAL_SCALE);
+                        int parsedScale;
 
-                        if (rawScale != null) {
-                            _scale = NormalizeScale(Convert.ToInt32(rawScale,
-                                System.Globalization.CultureInfo.InvariantCulture));
+                        if (TryParseRegistryInt(key.GetValue(REG_VAL_SCALE), out parsedScale)) {
+                            _scale = NormalizeScale(parsedScale);
                         }
 
-                        object rawSleep = key.GetValue(REG_VAL_SLEEP_SECONDS);
+                        double parsedSleep;
 
-                        if (rawSleep != null) {
-                            _idleSleepSeconds = NormalizeSleepTimeout(Convert.ToDouble(rawSleep,
-                                System.Globalization.CultureInfo.InvariantCulture));
+                        if (TryParseRegistryDouble(key.GetValue(REG_VAL_SLEEP_SECONDS), out parsedSleep)) {
+                            _idleSleepSeconds = NormalizeSleepTimeout(parsedSleep);
                         }
 
-                        object rawCombat = key.GetValue(REG_VAL_COMBAT);
+                        int parsedCombat;
 
-                        if (rawCombat != null) {
-                            _combatEnabled = Convert.ToInt32(rawCombat, System.Globalization.CultureInfo.InvariantCulture) !=
-                                             0;
+                        if (TryParseRegistryInt(key.GetValue(REG_VAL_COMBAT), out parsedCombat)) {
+                            _combatEnabled = parsedCombat != 0;
                         }
                     }
                 }
             }
-            catch { }
+            catch (SecurityException ex) {
+                NativeMethods.LogWarning("KirbyTaskbarBuddyContext.LoadSettings", ex);
+            }
+            catch (UnauthorizedAccessException ex) {
+                NativeMethods.LogWarning("KirbyTaskbarBuddyContext.LoadSettings", ex);
+            }
+            catch (IOException ex) {
+                NativeMethods.LogWarning("KirbyTaskbarBuddyContext.LoadSettings", ex);
+            }
+            catch (ObjectDisposedException ex) {
+                NativeMethods.LogWarning("KirbyTaskbarBuddyContext.LoadSettings", ex);
+            }
         }
 
         private void SaveSettings() {
@@ -307,7 +391,18 @@ namespace KirbyTaskbarBuddy {
                     }
                 }
             }
-            catch { }
+            catch (SecurityException ex) {
+                NativeMethods.LogWarning("KirbyTaskbarBuddyContext.SaveSettings", ex);
+            }
+            catch (UnauthorizedAccessException ex) {
+                NativeMethods.LogWarning("KirbyTaskbarBuddyContext.SaveSettings", ex);
+            }
+            catch (IOException ex) {
+                NativeMethods.LogWarning("KirbyTaskbarBuddyContext.SaveSettings", ex);
+            }
+            catch (ObjectDisposedException ex) {
+                NativeMethods.LogWarning("KirbyTaskbarBuddyContext.SaveSettings", ex);
+            }
         }
 
         private void SetScale(int newScale) {
@@ -831,7 +926,12 @@ namespace KirbyTaskbarBuddy {
 
             if (_envCheckCounter >= 15) {
                 _envCheckCounter = 0;
-                _cachedWorkArea = Screen.PrimaryScreen.WorkingArea;
+                Screen primaryScreen = Screen.PrimaryScreen;
+
+                if (primaryScreen != null) {
+                    _cachedWorkArea = primaryScreen.WorkingArea;
+                }
+
                 IntPtr fg = NativeMethods.GetForegroundWindow();
                 _isFullscreenCached = IsFullscreenAppActive(fg, _cachedWorkArea);
 
@@ -1136,50 +1236,59 @@ namespace KirbyTaskbarBuddy {
         /// while ignoring non-visible/minimized windows, transparent/tool overlays, and Windows shell classes.
         /// </summary>
         private bool IsFullscreenAppActive(IntPtr fg, Rectangle work) {
-            try {
-                if (fg == IntPtr.Zero || fg == _overlay.Handle) {
-                    return false;
-                }
+            if (fg == IntPtr.Zero) {
+                return false;
+            }
 
-                if (_enemyOverlay != null && _enemyOverlay.IsHandleCreated && fg == _enemyOverlay.Handle) {
-                    return false;
-                }
+            if (_overlay != null && _overlay.IsHandleCreated && fg == _overlay.Handle) {
+                return false;
+            }
 
-                if (_vfxOverlay != null && _vfxOverlay.IsHandleCreated && fg == _vfxOverlay.Handle) {
-                    return false;
-                }
+            if (_enemyOverlay != null && _enemyOverlay.IsHandleCreated && fg == _enemyOverlay.Handle) {
+                return false;
+            }
 
-                if (!NativeMethods.IsWindowVisible(fg) || NativeMethods.IsIconic(fg)) {
-                    return false;
-                }
+            if (_vfxOverlay != null && _vfxOverlay.IsHandleCreated && fg == _vfxOverlay.Handle) {
+                return false;
+            }
 
-                int exStyle = NativeMethods.GetWindowLong(fg, NativeMethods.GWL_EXSTYLE);
+            if (!NativeMethods.IsWindowVisible(fg) || NativeMethods.IsIconic(fg)) {
+                return false;
+            }
 
-                if (IsNonFullscreenOverlayExStyle(exStyle)) {
-                    return false;
-                }
+            int exStyle = NativeMethods.GetWindowLong(fg, NativeMethods.GWL_EXSTYLE);
 
-                _classNameSb.Length = 0;
-                NativeMethods.GetClassName(fg, _classNameSb, _classNameSb.Capacity);
+            if (IsNonFullscreenOverlayExStyle(exStyle)) {
+                return false;
+            }
+
+            _classNameSb.Length = 0;
+
+            if (NativeMethods.GetClassName(fg, _classNameSb, _classNameSb.Capacity) > 0) {
                 string cls = _classNameSb.ToString();
 
                 if (IsShellOrOverlayWindowClass(cls)) {
                     return false;
                 }
+            }
 
-                NativeMethods.RECT rect;
+            NativeMethods.RECT rect;
 
-                if (NativeMethods.GetWindowRect(fg, out rect)) {
-                    Rectangle screen = Screen.PrimaryScreen.Bounds;
+            if (NativeMethods.GetWindowRect(fg, out rect)) {
+                Screen primaryScreen = Screen.PrimaryScreen;
 
-                    if (rect.Left <= screen.Left && rect.Top <= screen.Top &&
-                        rect.Right >= screen.Right && rect.Bottom >= screen.Bottom &&
-                        rect.Bottom > work.Bottom) {
-                        return true;
-                    }
+                if (primaryScreen == null) {
+                    return false;
+                }
+
+                Rectangle screen = primaryScreen.Bounds;
+
+                if (rect.Left <= screen.Left && rect.Top <= screen.Top &&
+                    rect.Right >= screen.Right && rect.Bottom >= screen.Bottom &&
+                    rect.Bottom > work.Bottom) {
+                    return true;
                 }
             }
-            catch { }
 
             return false;
         }
@@ -1274,7 +1383,20 @@ namespace KirbyTaskbarBuddy {
                     return key != null && (key.GetValue(APP_NAME) != null || key.GetValue(LEGACY_APP_NAME) != null);
                 }
             }
-            catch {
+            catch (SecurityException ex) {
+                NativeMethods.LogWarning("KirbyTaskbarBuddyContext.IsStartupEnabled", ex);
+                return false;
+            }
+            catch (UnauthorizedAccessException ex) {
+                NativeMethods.LogWarning("KirbyTaskbarBuddyContext.IsStartupEnabled", ex);
+                return false;
+            }
+            catch (IOException ex) {
+                NativeMethods.LogWarning("KirbyTaskbarBuddyContext.IsStartupEnabled", ex);
+                return false;
+            }
+            catch (ObjectDisposedException ex) {
+                NativeMethods.LogWarning("KirbyTaskbarBuddyContext.IsStartupEnabled", ex);
                 return false;
             }
         }
@@ -1283,10 +1405,7 @@ namespace KirbyTaskbarBuddy {
             try {
                 using (RegistryKey key = Registry.CurrentUser.OpenSubKey(RUN_REG_KEY, true)) {
                     if (key != null) {
-                        try {
-                            key.DeleteValue(LEGACY_APP_NAME, false);
-                        }
-                        catch { }
+                        key.DeleteValue(LEGACY_APP_NAME, false);
 
                         if (enable) {
                             string exePath = Assembly.GetExecutingAssembly().Location;
@@ -1298,7 +1417,18 @@ namespace KirbyTaskbarBuddy {
                     }
                 }
             }
-            catch { }
+            catch (SecurityException ex) {
+                NativeMethods.LogWarning("KirbyTaskbarBuddyContext.SetStartup", ex);
+            }
+            catch (UnauthorizedAccessException ex) {
+                NativeMethods.LogWarning("KirbyTaskbarBuddyContext.SetStartup", ex);
+            }
+            catch (IOException ex) {
+                NativeMethods.LogWarning("KirbyTaskbarBuddyContext.SetStartup", ex);
+            }
+            catch (ObjectDisposedException ex) {
+                NativeMethods.LogWarning("KirbyTaskbarBuddyContext.SetStartup", ex);
+            }
         }
 
         private void OnToggleStartup(object sender, EventArgs e) {

@@ -1,4 +1,5 @@
 using System;
+using System.IO;
 using System.Runtime.CompilerServices;
 using System.Threading;
 using System.Windows.Forms;
@@ -26,16 +27,35 @@ namespace KirbyTaskbarBuddy {
             try {
                 NativeMethods.SetProcessDPIAware();
             }
-            catch { }
+            catch (EntryPointNotFoundException ex) {
+                NativeMethods.LogWarning("Program.SetProcessDPIAware", ex);
+            }
+            catch (DllNotFoundException ex) {
+                NativeMethods.LogWarning("Program.SetProcessDPIAware", ex);
+            }
 
             // If an instance is already running, signal its named exit event so it removes
             // its system tray icon and unhooks its keyboard hook cleanly before we start.
             try {
-                EventWaitHandle exitEvt = EventWaitHandle.OpenExisting("Local\\KirbyTaskbarBuddyExitEvent");
-                exitEvt.Set();
-                Thread.Sleep(300);
+                EventWaitHandle exitEvt;
+
+                if (EventWaitHandle.TryOpenExisting("Local\\KirbyTaskbarBuddyExitEvent", out exitEvt)) {
+                    using (exitEvt) {
+                        exitEvt.Set();
+                    }
+
+                    Thread.Sleep(300);
+                }
             }
-            catch { }
+            catch (WaitHandleCannotBeOpenedException ex) {
+                NativeMethods.LogWarning("Program.SignalExistingInstance", ex);
+            }
+            catch (UnauthorizedAccessException ex) {
+                NativeMethods.LogWarning("Program.SignalExistingInstance", ex);
+            }
+            catch (IOException ex) {
+                NativeMethods.LogWarning("Program.SignalExistingInstance", ex);
+            }
 
             bool createdNew;
 

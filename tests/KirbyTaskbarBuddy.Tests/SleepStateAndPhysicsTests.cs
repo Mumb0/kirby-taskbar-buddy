@@ -493,6 +493,42 @@ namespace KirbyTaskbarBuddy.Tests
         }
 
         [Fact]
+        public void TryParseRegistryHelpers_ParseValidValues_AndRejectCorruptOrNullWithoutThrowing()
+        {
+            int intResult;
+            Assert.True(KirbyTaskbarBuddyContext.TryParseRegistryInt(3, out intResult));
+            Assert.Equal(3, intResult);
+
+            Assert.True(KirbyTaskbarBuddyContext.TryParseRegistryInt(4L, out intResult));
+            Assert.Equal(4, intResult);
+
+            Assert.True(KirbyTaskbarBuddyContext.TryParseRegistryInt("2", out intResult));
+            Assert.Equal(2, intResult);
+
+            Assert.False(KirbyTaskbarBuddyContext.TryParseRegistryInt(null, out intResult));
+            Assert.False(KirbyTaskbarBuddyContext.TryParseRegistryInt("invalid", out intResult));
+            Assert.False(KirbyTaskbarBuddyContext.TryParseRegistryInt(long.MaxValue, out intResult));
+            Assert.False(KirbyTaskbarBuddyContext.TryParseRegistryInt(new byte[] { 1, 2 }, out intResult));
+
+            double doubleResult;
+            Assert.True(KirbyTaskbarBuddyContext.TryParseRegistryDouble(60, out doubleResult));
+            Assert.Equal(60.0, doubleResult);
+
+            Assert.True(KirbyTaskbarBuddyContext.TryParseRegistryDouble(180L, out doubleResult));
+            Assert.Equal(180.0, doubleResult);
+
+            Assert.True(KirbyTaskbarBuddyContext.TryParseRegistryDouble(300.0, out doubleResult));
+            Assert.Equal(300.0, doubleResult);
+
+            Assert.True(KirbyTaskbarBuddyContext.TryParseRegistryDouble("-1", out doubleResult));
+            Assert.Equal(-1.0, doubleResult);
+
+            Assert.False(KirbyTaskbarBuddyContext.TryParseRegistryDouble(null, out doubleResult));
+            Assert.False(KirbyTaskbarBuddyContext.TryParseRegistryDouble("not-a-number", out doubleResult));
+            Assert.False(KirbyTaskbarBuddyContext.TryParseRegistryDouble(new object(), out doubleResult));
+        }
+
+        [Fact]
         public void KirbyOverlayWindow_ClearOverlayAndUpdateSpriteFrame_ToggleIsClearedStateWithoutShowHide()
         {
             using (KirbyOverlayWindow window = new KirbyOverlayWindow())

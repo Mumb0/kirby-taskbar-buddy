@@ -58,7 +58,12 @@ namespace KirbyTaskbarBuddy {
                     try {
                         _bmp.UnlockBits(_data);
                     }
-                    catch { }
+                    catch (ExternalException ex) {
+                        NativeMethods.LogWarning("FastSheet.Dispose", ex);
+                    }
+                    catch (ArgumentException ex) {
+                        NativeMethods.LogWarning("FastSheet.Dispose", ex);
+                    }
 
                     _data = null;
                 }
@@ -259,17 +264,54 @@ namespace KirbyTaskbarBuddy {
             }
         }
 
+        private static void DisposeFailedSheetResources(Bitmap bmp, Stream stream) {
+            if (bmp != null) {
+                bmp.Dispose();
+            }
+
+            if (stream != null) {
+                stream.Dispose();
+            }
+        }
+
         private static FastSheet OpenSpriteSheet(string fileName, int reqW, int reqH) {
+            if (string.IsNullOrEmpty(fileName)) {
+                return null;
+            }
+
+            Stream resStream = null;
+            Bitmap resBmp = null;
+
             try {
-                Stream resStream = Assembly.GetExecutingAssembly().GetManifestResourceStream(fileName);
+                resStream = Assembly.GetExecutingAssembly().GetManifestResourceStream(fileName);
 
                 if (resStream != null) {
-                    return new FastSheet(resStream, new Bitmap(resStream), reqW, reqH);
+                    resBmp = new Bitmap(resStream);
+                    return new FastSheet(resStream, resBmp, reqW, reqH);
                 }
             }
-            catch { }
+            catch (ArgumentException ex) {
+                DisposeFailedSheetResources(resBmp, resStream);
+                NativeMethods.LogWarning("SpriteLoader.OpenSpriteSheet(Resource: " + fileName + ")", ex);
+            }
+            catch (ExternalException ex) {
+                DisposeFailedSheetResources(resBmp, resStream);
+                NativeMethods.LogWarning("SpriteLoader.OpenSpriteSheet(Resource: " + fileName + ")", ex);
+            }
+            catch (IOException ex) {
+                DisposeFailedSheetResources(resBmp, resStream);
+                NativeMethods.LogWarning("SpriteLoader.OpenSpriteSheet(Resource: " + fileName + ")", ex);
+            }
 
-            string exeDir = Path.GetDirectoryName(Assembly.GetExecutingAssembly().Location);
+            string location = Assembly.GetExecutingAssembly().Location;
+            string exeDir = string.IsNullOrEmpty(location)
+                ? AppDomain.CurrentDomain.BaseDirectory
+                : Path.GetDirectoryName(location);
+
+            if (string.IsNullOrEmpty(exeDir)) {
+                return null;
+            }
+
             string path = Path.Combine(exeDir, "sprites", fileName);
 
             if (!File.Exists(path)) {
@@ -277,7 +319,28 @@ namespace KirbyTaskbarBuddy {
             }
 
             if (File.Exists(path)) {
-                return new FastSheet(null, new Bitmap(path), reqW, reqH);
+                Bitmap fileBmp = null;
+
+                try {
+                    fileBmp = new Bitmap(path);
+                    return new FastSheet(null, fileBmp, reqW, reqH);
+                }
+                catch (ArgumentException ex) {
+                    DisposeFailedSheetResources(fileBmp, null);
+                    NativeMethods.LogWarning("SpriteLoader.OpenSpriteSheet(File: " + path + ")", ex);
+                }
+                catch (ExternalException ex) {
+                    DisposeFailedSheetResources(fileBmp, null);
+                    NativeMethods.LogWarning("SpriteLoader.OpenSpriteSheet(File: " + path + ")", ex);
+                }
+                catch (IOException ex) {
+                    DisposeFailedSheetResources(fileBmp, null);
+                    NativeMethods.LogWarning("SpriteLoader.OpenSpriteSheet(File: " + path + ")", ex);
+                }
+                catch (UnauthorizedAccessException ex) {
+                    DisposeFailedSheetResources(fileBmp, null);
+                    NativeMethods.LogWarning("SpriteLoader.OpenSpriteSheet(File: " + path + ")", ex);
+                }
             }
 
             return null;
@@ -827,6 +890,10 @@ namespace KirbyTaskbarBuddy {
             icon = null;
             iconHandle = IntPtr.Zero;
 
+            if (normalSheet == null || normalSheet.Width < 56 || normalSheet.Height < 149) {
+                return;
+            }
+
             try {
                 using (Bitmap crop = new Bitmap(24, 24, PixelFormat.Format32bppArgb)) {
                     for (int y = 0; y < 24; y++) {
@@ -846,7 +913,25 @@ namespace KirbyTaskbarBuddy {
                     icon = Icon.FromHandle(iconHandle);
                 }
             }
-            catch { }
+            catch (ExternalException ex) {
+                CleanupFailedTrayIcon(ref icon, ref iconHandle);
+                NativeMethods.LogWarning("SpriteLoader.ExtractTrayIconFromNormalSheet", ex);
+            }
+            catch (ArgumentException ex) {
+                CleanupFailedTrayIcon(ref icon, ref iconHandle);
+                NativeMethods.LogWarning("SpriteLoader.ExtractTrayIconFromNormalSheet", ex);
+            }
+        }
+
+        private static void CleanupFailedTrayIcon(ref Icon icon, ref IntPtr iconHandle) {
+            icon = null;
+
+            if (iconHandle == IntPtr.Zero) {
+                return;
+            }
+
+            NativeMethods.DestroyIcon(iconHandle);
+            iconHandle = IntPtr.Zero;
         }
 
     }

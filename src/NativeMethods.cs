@@ -220,6 +220,18 @@ namespace KirbyTaskbarBuddy {
             IntPtr dwMaximumWorkingSetSize);
 
         /// <summary>
+        /// Writes a non-fatal diagnostic warning to registered trace/debug listeners (e.g., Visual Studio, Rider, DebugView)
+        /// without allocating UI dialogs or performing disk I/O.
+        /// </summary>
+        public static void LogWarning(string context, Exception ex) {
+            if (ex == null) {
+                return;
+            }
+
+            Trace.TraceWarning("[KirbyTaskbarBuddy] {0}: {1}: {2}", context, ex.GetType().Name, ex.Message);
+        }
+
+        /// <summary>
         /// Forces garbage collection and instructs Windows to trim unused pages (such as temporary
         /// startup PNG decode buffers) from the process working set.
         /// </summary>
@@ -228,9 +240,20 @@ namespace KirbyTaskbarBuddy {
                 GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, true);
                 GC.WaitForPendingFinalizers();
                 GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, true);
-                SetProcessWorkingSetSize(Process.GetCurrentProcess().Handle, new IntPtr(-1), new IntPtr(-1));
+
+                using (Process currentProcess = Process.GetCurrentProcess()) {
+                    SetProcessWorkingSetSize(currentProcess.Handle, new IntPtr(-1), new IntPtr(-1));
+                }
             }
-            catch { }
+            catch (InvalidOperationException ex) {
+                LogWarning("NativeMethods.TrimMemory", ex);
+            }
+            catch (ExternalException ex) {
+                LogWarning("NativeMethods.TrimMemory", ex);
+            }
+            catch (NotSupportedException ex) {
+                LogWarning("NativeMethods.TrimMemory", ex);
+            }
         }
 
         /// <summary>

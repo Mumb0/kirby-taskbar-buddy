@@ -59,7 +59,7 @@ namespace KirbyTaskbarBuddy {
 
             bool createdNew;
 
-            using (Mutex mutex = new Mutex(true, "Local\\KirbyTaskbarBuddyMutex", out createdNew))
+            using (new Mutex(true, "Local\\KirbyTaskbarBuddyMutex", out createdNew))
             using (EventWaitHandle exitEvent =
                    new EventWaitHandle(false, EventResetMode.AutoReset, "Local\\KirbyTaskbarBuddyExitEvent")) {
                 if (!createdNew) {

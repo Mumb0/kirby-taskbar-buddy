@@ -58,6 +58,10 @@ namespace KirbyTaskbarBuddy.Tests
                     Assert.False(form.Mouthful.Loop);
                     AssertClipDefinitionValid(form.Name, "Swallow", form.Swallow, minRects: 5);
                     Assert.False(form.Swallow.Loop);
+                    Assert.Equal(3, form.Swallow.Sequence.Length);
+                    AssertClipDefinitionValid(form.Name, "SwallowAbility", form.SwallowAbility, minRects: 5);
+                    Assert.False(form.SwallowAbility.Loop);
+                    Assert.Equal(37, form.SwallowAbility.Sequence.Length);
                 }
             }
         }

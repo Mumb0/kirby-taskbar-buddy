@@ -46,6 +46,10 @@ namespace KirbyTaskbarBuddy.Tests
                         {
                             AssertRectsWithinBitmap(form.Name, "Swallow", form.Swallow.SourceRects, bmp);
                         }
+                        if (form.SwallowAbility != null)
+                        {
+                            AssertRectsWithinBitmap(form.Name, "SwallowAbility", form.SwallowAbility.SourceRects, bmp);
+                        }
 
                         if (form.Guard.Pivot == PivotMode.MirrorGuard)
                         {
@@ -163,7 +167,11 @@ namespace KirbyTaskbarBuddy.Tests
                     }
                     if (form.Swallow != null)
                     {
-                        AssertLoadedClipValid(form.Name, "Swallow", form.Swallow, expectedMinFrames: 5);
+                        AssertLoadedClipValid(form.Name, "Swallow", form.Swallow, expectedMinFrames: 3);
+                    }
+                    if (form.SwallowAbility != null)
+                    {
+                        AssertLoadedClipValid(form.Name, "SwallowAbility", form.SwallowAbility, expectedMinFrames: 37);
                     }
                 }
 

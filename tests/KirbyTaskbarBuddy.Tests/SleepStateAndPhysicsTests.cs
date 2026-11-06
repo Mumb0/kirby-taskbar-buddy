@@ -394,13 +394,25 @@ namespace KirbyTaskbarBuddy.Tests
         public void AdvanceSwallowState_TransformsIntoSwallowedEnemyCopyAbility_OrStaysNormalWhenNone()
         {
             SpriteTile[] mouthfulTiles = CreateDummyTiles(1);
-            SpriteTile[] swallowTiles = CreateDummyTiles(3);
+            SpriteTile[] rawSwallowTiles = CreateDummyTiles(5);
+            SpriteTile[] noAbilityFrames = new SpriteTile[FormDefinitions.SwallowNoAbilitySeq.Length];
+            for (int i = 0; i < noAbilityFrames.Length; i++)
+            {
+                noAbilityFrames[i] = rawSwallowTiles[FormDefinitions.SwallowNoAbilitySeq[i]];
+            }
+            SpriteTile[] abilityFrames = new SpriteTile[FormDefinitions.SwallowAbilitySeq.Length];
+            for (int i = 0; i < abilityFrames.Length; i++)
+            {
+                abilityFrames[i] = rawSwallowTiles[FormDefinitions.SwallowAbilitySeq[i]];
+            }
+
             FormDef normalForm = new FormDef
             {
                 Name = "normal",
                 Key = "0",
-                Mouthful = new AnimClip { Speed = 0.5, Loop = false, RawFrames = mouthfulTiles, Frames = mouthfulTiles },
-                Swallow = new AnimClip { Speed = 0.5, Loop = false, RawFrames = swallowTiles, Frames = swallowTiles }
+                Mouthful = new AnimClip { Speed = 1.0, Loop = false, RawFrames = mouthfulTiles, Frames = mouthfulTiles },
+                Swallow = new AnimClip { Speed = 0.5, Loop = false, RawFrames = rawSwallowTiles, Frames = noAbilityFrames },
+                SwallowAbility = new AnimClip { Speed = 1.0, Loop = false, RawFrames = rawSwallowTiles, Frames = abilityFrames }
             };
             FormDef beamForm = new FormDef
             {
@@ -412,7 +424,7 @@ namespace KirbyTaskbarBuddy.Tests
             EnemyDef waddleDee = new EnemyDef { Name = "waddle-dee", CopyAbility = null };
             EnemyDef waddleDoo = new EnemyDef { Name = "waddle-doo", CopyAbility = "beam" };
 
-            // 1. Swallowing Waddle Dee (CopyAbility = null) keeps Kirby in Normal form:
+            // 1. Swallowing Waddle Dee (CopyAbility = null) plays normal Swallow and keeps Kirby in Normal form:
             SwallowState state = SwallowState.Mouthful;
             double animTime = 0.0;
             FormDef currentForm = normalForm;
@@ -427,20 +439,30 @@ namespace KirbyTaskbarBuddy.Tests
             Assert.Same(normalForm, currentForm);
             Assert.Null(swallowedEnemy);
 
-            // 2. Swallowing Waddle Doo (CopyAbility = "beam") transforms Kirby into Beam form:
+            // 2. Swallowing Waddle Doo (CopyAbility = "beam") steps through all 37 SwallowAbility frames and transforms into Beam form:
             state = SwallowState.Mouthful;
             animTime = 0.0;
             currentForm = normalForm;
             swallowedEnemy = waddleDoo;
 
-            for (int tick = 0; tick < 50 && state != SwallowState.None; tick++)
+            System.Collections.Generic.List<SpriteTile> playedAbilityFrames = new System.Collections.Generic.List<SpriteTile>();
+            for (int tick = 0; tick < 60 && state != SwallowState.None; tick++)
             {
-                KirbyTaskbarBuddyContext.AdvanceSwallowState(ref state, ref animTime, 1.0, ref currentForm, forms, ref swallowedEnemy);
+                SpriteTile frame = KirbyTaskbarBuddyContext.AdvanceSwallowState(ref state, ref animTime, 1.0, ref currentForm, forms, ref swallowedEnemy);
+                if (state == SwallowState.Swallowing && frame != null)
+                {
+                    playedAbilityFrames.Add(frame);
+                }
             }
 
             Assert.Equal(SwallowState.None, state);
             Assert.Same(beamForm, currentForm);
             Assert.Null(swallowedEnemy);
+            Assert.Equal(37, playedAbilityFrames.Count);
+            for (int i = 0; i < 37; i++)
+            {
+                Assert.Same(rawSwallowTiles[FormDefinitions.SwallowAbilitySeq[i]], playedAbilityFrames[i]);
+            }
         }
 
         [Fact]

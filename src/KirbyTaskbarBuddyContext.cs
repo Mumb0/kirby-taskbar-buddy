@@ -911,6 +911,12 @@ namespace KirbyTaskbarBuddy {
                 return null;
             }
 
+            bool hasAbility = swallowedEnemy != null && !string.IsNullOrEmpty(swallowedEnemy.CopyAbility);
+            AnimClip swallowClip = hasAbility && currentForm.SwallowAbility != null &&
+                                   currentForm.SwallowAbility.HasFrames()
+                ? currentForm.SwallowAbility
+                : currentForm.Swallow;
+
             if (swallowState == SwallowState.Mouthful) {
                 if (currentForm.Mouthful == null || !currentForm.Mouthful.HasFrames()) {
                     swallowState = SwallowState.Swallowing;
@@ -926,11 +932,15 @@ namespace KirbyTaskbarBuddy {
 
                     swallowState = SwallowState.Swallowing;
                     swallowAnimTime = 0.0;
+
+                    if (swallowClip != null && swallowClip.HasFrames()) {
+                        return swallowClip.Frames[0];
+                    }
                 }
             }
 
             if (swallowState == SwallowState.Swallowing) {
-                if (currentForm.Swallow == null || !currentForm.Swallow.HasFrames()) {
+                if (swallowClip == null || !swallowClip.HasFrames()) {
                     currentForm = ResolveSwallowedForm(forms, currentForm, swallowedEnemy);
                     swallowedEnemy = null;
                     swallowState = SwallowState.None;
@@ -938,11 +948,11 @@ namespace KirbyTaskbarBuddy {
                     return null;
                 }
 
-                swallowAnimTime += currentForm.Swallow.Speed * delta60;
+                swallowAnimTime += swallowClip.Speed * delta60;
                 int idx = (int)Math.Floor(swallowAnimTime);
 
-                if (idx < currentForm.Swallow.Frames.Length) {
-                    return currentForm.Swallow.Frames[Math.Max(0, idx)];
+                if (idx < swallowClip.Frames.Length) {
+                    return swallowClip.Frames[Math.Max(0, idx)];
                 }
 
                 currentForm = ResolveSwallowedForm(forms, currentForm, swallowedEnemy);

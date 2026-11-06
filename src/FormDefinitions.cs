@@ -126,6 +126,7 @@ namespace KirbyTaskbarBuddy {
         public AnimClip Inhale;
         public AnimClip Mouthful;
         public AnimClip Swallow;
+        public AnimClip SwallowAbility;
 
     }
 
@@ -178,6 +179,17 @@ namespace KirbyTaskbarBuddy {
 
         public static readonly int[]
             PostWakeStandSeq = new[] { 0, 1, 0 }; // Brief blink in current ability before walking
+
+        // 0-based frame index sequence for swallowing a regular enemy without a copy ability (frames 1, 3, 5):
+        public static readonly int[] SwallowNoAbilitySeq = new[] { 0, 2, 4 };
+
+        // 0-based frame index sequence for swallowing an enemy that grants a copy ability
+        // (1-based: 1 1 1 2 2 1 1 1 1 2 3 3 2 2 3 4 3 3 2 4 4 followed by 16 frames of 5):
+        public static readonly int[] SwallowAbilitySeq = new[]
+        {
+            0, 0, 0, 1, 1, 0, 0, 0, 0, 1, 2, 2, 1, 1, 2, 3, 2, 2, 1, 3, 3,
+            4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4
+        };
 
         /// <summary>
         /// Shorthand builder for a single spritesheet <see cref="Rectangle"/>.
@@ -278,19 +290,19 @@ namespace KirbyTaskbarBuddy {
                 StandClip(Row(55, 24, 23, 113, 142)));
 
             if (normalForm != null) {
+                Rectangle[] swallowRects = new[]
+                {
+                    R(185, 86, 29, 32),
+                    R(219, 90, 32, 28),
+                    R(256, 96, 39, 22),
+                    R(300, 99, 32, 19),
+                    R(337, 102, 23, 16)
+                };
+
                 normalForm.Inhale = Clip(new[] { R(22, 94, 21, 24), R(48, 86, 21, 32) }, 0.15, false);
                 normalForm.Mouthful = Clip(new[] { R(111, 87, 32, 31) }, 0.08, false);
-                normalForm.Swallow = Clip(
-                    new[]
-                    {
-                        R(185, 86, 29, 32),
-                        R(219, 90, 32, 28),
-                        R(256, 96, 39, 22),
-                        R(300, 99, 32, 19),
-                        R(337, 102, 23, 16)
-                    },
-                    0.15,
-                    false);
+                normalForm.Swallow = Clip(swallowRects, 0.15, false, PivotMode.FeetBottom4Rows, SwallowNoAbilitySeq);
+                normalForm.SwallowAbility = Clip(swallowRects, 1.0, false, PivotMode.FeetBottom4Rows, SwallowAbilitySeq);
             }
 
             AddForm(forms, keyToForm, ref normalForm, "ice", "l", "kirby-ice.png",

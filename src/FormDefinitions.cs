@@ -280,7 +280,16 @@ namespace KirbyTaskbarBuddy {
             if (normalForm != null) {
                 normalForm.Inhale = Clip(new[] { R(22, 94, 21, 24), R(48, 86, 21, 32) }, 0.15, false);
                 normalForm.Mouthful = Clip(new[] { R(111, 87, 32, 31) }, 0.08, false);
-                normalForm.Swallow = Clip(new[] { R(185, 86, 29, 32), R(219, 96, 39, 22), R(263, 102, 23, 16) }, 0.15,
+                normalForm.Swallow = Clip(
+                    new[]
+                    {
+                        R(185, 86, 29, 32),
+                        R(219, 90, 32, 28),
+                        R(256, 96, 39, 22),
+                        R(300, 99, 32, 19),
+                        R(337, 102, 23, 16)
+                    },
+                    0.15,
                     false);
             }
 

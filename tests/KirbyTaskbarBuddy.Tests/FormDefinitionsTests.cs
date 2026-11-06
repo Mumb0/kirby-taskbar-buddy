@@ -56,7 +56,7 @@ namespace KirbyTaskbarBuddy.Tests
                     Assert.False(form.Inhale.Loop);
                     AssertClipDefinitionValid(form.Name, "Mouthful", form.Mouthful, minRects: 1);
                     Assert.False(form.Mouthful.Loop);
-                    AssertClipDefinitionValid(form.Name, "Swallow", form.Swallow, minRects: 3);
+                    AssertClipDefinitionValid(form.Name, "Swallow", form.Swallow, minRects: 5);
                     Assert.False(form.Swallow.Loop);
                 }
             }

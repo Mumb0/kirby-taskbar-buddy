@@ -163,7 +163,7 @@ namespace KirbyTaskbarBuddy.Tests
                     }
                     if (form.Swallow != null)
                     {
-                        AssertLoadedClipValid(form.Name, "Swallow", form.Swallow, expectedMinFrames: 3);
+                        AssertLoadedClipValid(form.Name, "Swallow", form.Swallow, expectedMinFrames: 5);
                     }
                 }
 

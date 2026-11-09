@@ -6,7 +6,7 @@ echo Stopping running KirbyTaskbarBuddy...
 taskkill /f /im KirbyTaskbarBuddy.exe >nul 2>&1
 
 set "RES_FLAGS="
-for %%F in (sprites\kirby-*.png sprites\enemy-*.png) do (
+for %%F in (sprites\kirby-*.png sprites\enemy-*.png sprites\misc-*.png) do (
     set "RES_FLAGS=!RES_FLAGS! /resource:sprites\%%~nxF,%%~nxF"
 )
 

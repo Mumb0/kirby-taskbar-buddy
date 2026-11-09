@@ -144,6 +144,10 @@ namespace KirbyTaskbarBuddy {
                         LoadClip(rawSheet, form.Mouthful, scratch);
                         LoadClip(rawSheet, form.Swallow, scratch);
                         LoadClip(rawSheet, form.SwallowAbility, scratch);
+
+                        if (form.SwallowAbility != null) {
+                            CompositeSwallowAbilityParticles(form.SwallowAbility, scratch);
+                        }
                     }
                 }
             }
@@ -236,6 +240,101 @@ namespace KirbyTaskbarBuddy {
             }
             else {
                 clip.Frames = clip.RawFrames;
+            }
+        }
+
+        /// <summary>
+        /// Composites the particle effects from <c>misc-effects.png</c> (<see cref="FormDefinitions.SwallowAbilityParticles"/>)
+        /// on top of Kirby's floor-aligned swallow frames for the ability-swallow sequence (<see cref="FormDef.SwallowAbility"/>).
+        /// </summary>
+        internal static void CompositeSwallowAbilityParticles(AnimClip clip, int[] scratch) {
+            if (clip == null || clip.Frames == null || clip.RawFrames == null || scratch == null) {
+                return;
+            }
+
+            int effW = 1, effH = 1;
+            ExpandBounds(FormDefinitions.SwallowEffectRects, ref effW, ref effH);
+
+            using (FastSheet effectsSheet = OpenSpriteSheet("misc-effects.png", effW, effH)) {
+                if (effectsSheet == null) {
+                    return;
+                }
+
+                SwallowParticleLayer[][] particleSeq = FormDefinitions.SwallowAbilityParticles;
+                Rectangle[] effectRects = FormDefinitions.SwallowEffectRects;
+                int count = Math.Min(clip.Frames.Length, particleSeq != null ? particleSeq.Length : 0);
+
+                for (int i = 0; i < count; i++) {
+                    SwallowParticleLayer[] layers = particleSeq[i];
+                    SpriteTile baseTile = clip.Frames[i];
+
+                    if (layers == null || layers.Length == 0 || baseTile == null || baseTile.PremulPixels == null) {
+                        continue;
+                    }
+
+                    Array.Clear(scratch, 0, scratch.Length);
+
+                    for (int sy = 0; sy < baseTile.Height; sy++) {
+                        int ty = baseTile.MinY + sy;
+
+                        if (ty < 0 || ty >= NativeMethods.TILE_SIZE) {
+                            continue;
+                        }
+
+                        int dstRow = ty * NativeMethods.TILE_SIZE;
+                        int srcRow = sy * baseTile.Width;
+
+                        for (int sx = 0; sx < baseTile.Width; sx++) {
+                            int tx = baseTile.MinX + sx;
+
+                            if (tx >= 0 && tx < NativeMethods.TILE_SIZE) {
+                                int px = baseTile.PremulPixels[srcRow + sx];
+
+                                if (px != 0) {
+                                    scratch[dstRow + tx] = px;
+                                }
+                            }
+                        }
+                    }
+
+                    for (int l = 0; l < layers.Length; l++) {
+                        SwallowParticleLayer layer = layers[l];
+
+                        if (layer.SpriteIndex < 0 || layer.SpriteIndex >= effectRects.Length) {
+                            continue;
+                        }
+
+                        Rectangle er = effectRects[layer.SpriteIndex];
+                        int destX = NativeMethods.PIVOT_X + layer.OffsetX;
+                        int destY = NativeMethods.PIVOT_Y + layer.OffsetY;
+
+                        for (int dy = 0; dy < er.Height; dy++) {
+                            int ty = destY + dy;
+
+                            if (ty < 0 || ty >= NativeMethods.TILE_SIZE) {
+                                continue;
+                            }
+
+                            int dstRow = ty * NativeMethods.TILE_SIZE;
+
+                            for (int dx = 0; dx < er.Width; dx++) {
+                                int tx = destX + dx;
+
+                                if (tx < 0 || tx >= NativeMethods.TILE_SIZE) {
+                                    continue;
+                                }
+
+                                int c = effectsSheet.GetPixel(er.X + dx, er.Y + dy);
+
+                                if (!IsTransparent(c)) {
+                                    scratch[dstRow + tx] = (255 << 24) | (c & 0x00FFFFFF);
+                                }
+                            }
+                        }
+                    }
+
+                    clip.Frames[i] = BuildSpriteTile(scratch);
+                }
             }
         }
 
@@ -398,6 +497,10 @@ namespace KirbyTaskbarBuddy {
 
             if (rgb == 0x009696FF) {
                 return true; // (150, 150, 255) inner lavender sprite-box fill
+            }
+
+            if (rgb == 0x00004080) {
+                return true; // (0, 64, 128) dark navy sprite-box fill / border
             }
 
             return false;

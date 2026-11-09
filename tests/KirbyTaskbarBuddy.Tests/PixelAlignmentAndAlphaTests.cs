@@ -277,6 +277,7 @@ namespace KirbyTaskbarBuddy.Tests
             Assert.True(SpriteLoader.IsRawSheetBgColor(unchecked((int)0xFF8080FF), bg0, bgCorner)); // Outer sheet periwinkle
             Assert.True(SpriteLoader.IsRawSheetBgColor(unchecked((int)0xFF709AD1), bg0, bgCorner)); // Blue divider grid
             Assert.True(SpriteLoader.IsRawSheetBgColor(unchecked((int)0xFF9696FF), bg0, bgCorner)); // Lavender fill
+            Assert.True(SpriteLoader.IsRawSheetBgColor(unchecked((int)0xFF004080), bg0, bgCorner)); // Dark navy box fill
             Assert.False(SpriteLoader.IsRawSheetBgColor(unchecked((int)0xFFFF80A0), bg0, bgCorner)); // Kirby pink
         }
 

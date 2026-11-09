@@ -88,6 +88,15 @@ namespace KirbyTaskbarBuddy.Tests
                     AssertRectsWithinBitmap("sleep", "SleepCoords", FormDefinitions.SleepCoords, sleepBmp);
                 }
             }
+
+            using (Stream effectsStream = appAssembly.GetManifestResourceStream("misc-effects.png"))
+            {
+                Assert.NotNull(effectsStream);
+                using (Bitmap effectsBmp = new Bitmap(effectsStream))
+                {
+                    AssertRectsWithinBitmap("misc-effects", "SwallowEffectRects", FormDefinitions.SwallowEffectRects, effectsBmp);
+                }
+            }
         }
 
         [Fact]
@@ -129,6 +138,12 @@ namespace KirbyTaskbarBuddy.Tests
             using (Bitmap sleepBmp = new Bitmap(sleepStream))
             {
                 Assert.Equal(0, sleepBmp.GetPixel(0, 0).A);
+            }
+
+            using (Stream effectsStream = appAssembly.GetManifestResourceStream("misc-effects.png"))
+            using (Bitmap effectsBmp = new Bitmap(effectsStream))
+            {
+                Assert.Equal(0, effectsBmp.GetPixel(0, 0).A);
             }
         }
 
@@ -172,6 +187,36 @@ namespace KirbyTaskbarBuddy.Tests
                     if (form.SwallowAbility != null)
                     {
                         AssertLoadedClipValid(form.Name, "SwallowAbility", form.SwallowAbility, expectedMinFrames: 37);
+
+                        for (int i = 0; i < 27; i++)
+                        {
+                            int rawIdx = form.SwallowAbility.Sequence[i];
+                            SpriteTile rawTile = form.SwallowAbility.RawFrames[rawIdx];
+                            SpriteTile compTile = form.SwallowAbility.Frames[i];
+                            Assert.NotSame(rawTile, compTile);
+
+                            bool hasParticleDiff = compTile.Width != rawTile.Width || compTile.Height != rawTile.Height;
+                            if (!hasParticleDiff)
+                            {
+                                for (int p = 0; p < compTile.PremulPixels.Length; p++)
+                                {
+                                    if (compTile.PremulPixels[p] != rawTile.PremulPixels[p])
+                                    {
+                                        hasParticleDiff = true;
+                                        break;
+                                    }
+                                }
+                            }
+
+                            Assert.True(
+                                hasParticleDiff,
+                                string.Format("SwallowAbility.Frames[{0}] should include composited particle effects", i));
+                        }
+
+                        for (int i = 27; i < form.SwallowAbility.Frames.Length; i++)
+                        {
+                            Assert.Same(form.SwallowAbility.RawFrames[4], form.SwallowAbility.Frames[i]);
+                        }
                     }
                 }
 

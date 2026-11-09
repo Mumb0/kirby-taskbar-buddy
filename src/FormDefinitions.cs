@@ -84,6 +84,24 @@ namespace KirbyTaskbarBuddy {
     }
 
     /// <summary>
+    /// Placement of a single particle sprite from <c>misc-effects.png</c> (<see cref="FormDefinitions.SwallowEffectRects"/>)
+    /// relative to Kirby's floor pivot <c>(PIVOT_X, PIVOT_Y)</c> during the ability-swallow animation.
+    /// </summary>
+    public struct SwallowParticleLayer {
+
+        public int SpriteIndex;
+        public int OffsetX;
+        public int OffsetY;
+
+        public SwallowParticleLayer(int spriteIndex, int offsetX, int offsetY) {
+            SpriteIndex = spriteIndex;
+            OffsetX = offsetX;
+            OffsetY = offsetY;
+        }
+
+    }
+
+    /// <summary>
     /// Self-contained definition and runtime tile storage for a single sprite animation clip
     /// (such as Walk, Guard, Jump, Stand, Sleep, or future Attack and Enemy/Helper animations).
     /// </summary>
@@ -189,6 +207,88 @@ namespace KirbyTaskbarBuddy {
         {
             0, 0, 0, 1, 1, 0, 0, 0, 0, 1, 2, 2, 1, 1, 2, 3, 2, 2, 1, 3, 3,
             4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4
+        };
+
+        /// <summary>
+        /// Source rectangles in <c>misc-effects.png</c> for the particle sprites composited over Kirby
+        /// during <see cref="SwallowAbilitySeq"/>.
+        /// </summary>
+        public static readonly Rectangle[] SwallowEffectRects = new[]
+        {
+            R(4, 40, 31, 31),   // 0: StarLarge (31x31 starburst)
+            R(40, 48, 15, 15),  // 1: StarSmall (15x15 starburst)
+            R(4, 76, 16, 16),   // 2: PuffSolid (16x16 solid white puff cloud)
+            R(24, 76, 16, 16),  // 3: PuffBubbles (16x16 bubble cluster puff)
+            R(44, 76, 16, 16),  // 4: PuffSparkles (16x16 fine sparkle dots)
+            R(44, 144, 16, 16), // 5: SparkleBurst (16x16 dense corner sparkle burst)
+            R(64, 144, 16, 16)  // 6: SparkleBurst2 (16x16 intermediate corner sparkle burst)
+        };
+
+        private static SwallowParticleLayer P(int spriteIndex, int offsetX, int offsetY) {
+            return new SwallowParticleLayer(spriteIndex, offsetX, offsetY);
+        }
+
+        /// <summary>
+        /// Back-to-front particle layers from <c>misc-effects.png</c> (<see cref="SwallowEffectRects"/>)
+        /// composited over Kirby on frames <c>0..26</c> of <see cref="SwallowAbilitySeq"/>.
+        /// Remaining flat-crouch frames (<c>27..36</c>) have no particle overlay.
+        /// </summary>
+        public static readonly SwallowParticleLayer[][] SwallowAbilityParticles = new[]
+        {
+            // #0:
+            new[] { P(5, -9, -21), P(5, -5, -21), P(2, -9, -19), P(2, -5, -19), P(5, -9, -17), P(5, -5, -17) },
+            // #1:
+            new[] { P(5, -11, -23), P(5, -3, -23), P(2, -11, -19), P(2, -3, -19), P(5, -11, -15), P(5, -3, -15) },
+            // #2:
+            new[] { P(5, -13, -25), P(5, -1, -25), P(1, -25, -24), P(2, -13, -19), P(2, -1, -19), P(5, -13, -13), P(5, -1, -13) },
+            // #3:
+            new[] { P(5, -14, -26), P(5, 0, -26), P(0, -33, -32), P(2, -14, -19), P(2, 0, -19), P(5, -14, -12), P(5, 0, -12) },
+            // #4:
+            new[] { P(6, -16, -28), P(6, 2, -28), P(2, -16, -19), P(2, 2, -19), P(6, -16, -10), P(6, 2, -10) },
+            // #5:
+            new[] { P(6, -18, -30), P(6, 4, -30), P(2, -18, -20), P(2, 4, -20), P(6, -18, -8), P(6, 4, -8) },
+            // #6:
+            new[] { P(6, -19, -31), P(6, 5, -31), P(2, -19, -20), P(2, 5, -20), P(1, 12, -10), P(6, -19, -7), P(6, 5, -7) },
+            // #7:
+            new[] { P(6, -21, -33), P(6, 7, -33), P(2, -21, -20), P(2, 7, -20), P(0, 4, -18), P(6, -21, -5), P(6, 7, -5) },
+            // #8:
+            new[] { P(4, -22, -34), P(4, 8, -34), P(3, -22, -20), P(3, 8, -20), P(4, -22, -4), P(4, 8, -4) },
+            // #9:
+            new[] { P(4, -24, -36), P(4, 10, -36), P(3, -23, -21), P(3, 9, -21), P(4, -24, -2), P(4, 10, -2) },
+            // #10:
+            new[] { P(4, -25, -37), P(4, 11, -37), P(1, -4, -31), P(3, -23, -21), P(3, 9, -21), P(2, -9, -19), P(2, -5, -19), P(4, -25, -1), P(4, 11, -1) },
+            // #11:
+            new[] { P(4, -26, -38), P(4, 12, -38), P(0, -12, -39), P(3, -24, -21), P(3, 10, -21), P(2, -11, -19), P(2, -3, -19), P(4, -26, 0), P(4, 12, 0) },
+            // #12:
+            new[] { P(3, -25, -22), P(3, 11, -22), P(2, -13, -19), P(2, -1, -19) },
+            // #13:
+            new[] { P(1, -2, -26), P(3, -25, -23), P(3, 11, -23), P(2, -16, -19), P(2, 2, -19) },
+            // #14:
+            new[] { P(0, -10, -34), P(3, -25, -23), P(3, 12, -23), P(2, -18, -20), P(2, 4, -20) },
+            // #15:
+            new[] { P(2, -19, -20), P(2, 5, -20) },
+            // #16:
+            new[] { P(2, -21, -20), P(2, 7, -20) },
+            // #17:
+            new[] { P(1, -11, -22), P(3, -22, -20), P(3, 8, -20) },
+            // #18:
+            new[] { P(0, -19, -30), P(3, -23, -21), P(3, 9, -21) },
+            // #19:
+            new[] { P(3, -23, -21), P(3, 9, -21) },
+            // #20:
+            new[] { P(3, -24, -21), P(3, 10, -21) },
+            // #21:
+            new[] { P(1, -6, -36), P(3, -25, -22), P(3, 11, -22) },
+            // #22:
+            new[] { P(0, -14, -44), P(3, -25, -22), P(3, 11, -22) },
+            // #23:
+            new[] { P(3, -25, -23), P(3, 11, -23) },
+            // #24:
+            new[] { P(3, -25, -23), P(3, 12, -23) },
+            // #25:
+            new[] { P(1, 10, -17) },
+            // #26:
+            new[] { P(0, 2, -25) }
         };
 
         /// <summary>

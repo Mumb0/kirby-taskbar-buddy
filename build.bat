@@ -11,7 +11,7 @@ for %%F in (sprites\kirby-*.png sprites\enemy-*.png sprites\misc-*.png) do (
 )
 
 echo Compiling single-file KirbyTaskbarBuddy.exe (with embedded sprites)...
-"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /nologo /optimize+ /define:TRACE /platform:x86 /target:winexe /win32icon:sprites\kirby.ico /out:KirbyTaskbarBuddy.exe /r:System.Windows.Forms.dll /r:System.Drawing.dll !RES_FLAGS! src\*.cs
+"C:\Windows\Microsoft.NET\Framework64\v4.0.30319\csc.exe" /nologo /optimize+ /define:TRACE /platform:x86 /target:winexe /win32icon:sprites\kirby.ico /out:KirbyTaskbarBuddy.exe /r:System.Windows.Forms.dll /r:System.Drawing.dll !RES_FLAGS! /recurse:src\*.cs
 
 if %ERRORLEVEL% EQU 0 (
     echo Starting KirbyTaskbarBuddy.exe...

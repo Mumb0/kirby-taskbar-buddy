@@ -18,7 +18,7 @@ namespace KirbyTaskbarBuddy {
             if (args != null && args.Length > 0 &&
                 string.Equals(args[0], "--clean-sprites", StringComparison.OrdinalIgnoreCase)) {
                 string dir = args.Length > 1 ? args[1] : "sprites";
-                SpriteLoader.StripSpritesheetBackgrounds(dir);
+                SpritesheetCleaner.StripSpritesheetBackgrounds(dir);
                 return;
             }
 
@@ -28,10 +28,10 @@ namespace KirbyTaskbarBuddy {
                 NativeMethods.SetProcessDPIAware();
             }
             catch (EntryPointNotFoundException ex) {
-                NativeMethods.LogWarning("Program.SetProcessDPIAware", ex);
+                Diagnostics.LogWarning("Program.SetProcessDPIAware", ex);
             }
             catch (DllNotFoundException ex) {
-                NativeMethods.LogWarning("Program.SetProcessDPIAware", ex);
+                Diagnostics.LogWarning("Program.SetProcessDPIAware", ex);
             }
 
             // If an instance is already running, signal its named exit event so it removes
@@ -48,13 +48,13 @@ namespace KirbyTaskbarBuddy {
                 }
             }
             catch (WaitHandleCannotBeOpenedException ex) {
-                NativeMethods.LogWarning("Program.SignalExistingInstance", ex);
+                Diagnostics.LogWarning("Program.SignalExistingInstance", ex);
             }
             catch (UnauthorizedAccessException ex) {
-                NativeMethods.LogWarning("Program.SignalExistingInstance", ex);
+                Diagnostics.LogWarning("Program.SignalExistingInstance", ex);
             }
             catch (IOException ex) {
-                NativeMethods.LogWarning("Program.SignalExistingInstance", ex);
+                Diagnostics.LogWarning("Program.SignalExistingInstance", ex);
             }
 
             bool createdNew;

@@ -614,16 +614,16 @@ namespace KirbyTaskbarBuddy.Tests
         public void InhaleParticles_SpawnFourInRectangularArea_MoveTowardMouth_AndRespawnOnDespawn()
         {
             System.Random rng = new System.Random(42);
-            InhaleParticle[] particles = new InhaleParticle[KirbyTaskbarBuddyContext.INHALE_PARTICLE_COUNT];
+            InhaleParticle[] particles = new InhaleParticle[InhaleParticleEffect.PARTICLE_COUNT];
 
             // 1. Start with 4 particle spawns in the rectangular area in front of Kirby:
             Assert.Equal(4, particles.Length);
-            KirbyTaskbarBuddyContext.InitInhaleParticles(particles, rng);
+            InhaleParticleEffect.InitParticles(particles, rng);
 
             for (int i = 0; i < particles.Length; i++)
             {
-                Assert.InRange(particles[i].Dx, KirbyTaskbarBuddyContext.INHALE_PARTICLE_MIN_DX, KirbyTaskbarBuddyContext.INHALE_PARTICLE_MAX_DX);
-                Assert.InRange(particles[i].Dy, KirbyTaskbarBuddyContext.INHALE_PARTICLE_MIN_DY, KirbyTaskbarBuddyContext.INHALE_PARTICLE_MAX_DY);
+                Assert.InRange(particles[i].Dx, InhaleParticleEffect.PARTICLE_MIN_DX, InhaleParticleEffect.PARTICLE_MAX_DX);
+                Assert.InRange(particles[i].Dy, InhaleParticleEffect.PARTICLE_MIN_DY, InhaleParticleEffect.PARTICLE_MAX_DY);
                 Assert.Equal(particles[i].Dy <= 0.0, particles[i].BlackOnTop);
             }
 
@@ -632,51 +632,57 @@ namespace KirbyTaskbarBuddy.Tests
             particles[1] = new InhaleParticle { Dx = 1.5, Dy = 0.5, BlackOnTop = false }; // Within 1 tick of mouth -> will despawn & respawn
 
             double prevDist0 = System.Math.Sqrt(particles[0].Dx * particles[0].Dx + particles[0].Dy * particles[0].Dy);
-            KirbyTaskbarBuddyContext.StepInhaleParticles(particles, 1.0, rng);
+            InhaleParticleEffect.StepParticles(particles, 1.0, rng);
             double nextDist0 = System.Math.Sqrt(particles[0].Dx * particles[0].Dx + particles[0].Dy * particles[0].Dy);
 
-            // Particle 0 moved toward the mouth by INHALE_PARTICLE_SPEED:
-            Assert.Equal(prevDist0 - KirbyTaskbarBuddyContext.INHALE_PARTICLE_SPEED, nextDist0, 5);
+            // Particle 0 moved toward the mouth by PARTICLE_SPEED:
+            Assert.Equal(prevDist0 - InhaleParticleEffect.PARTICLE_SPEED, nextDist0, 5);
             Assert.True(particles[0].Dx > 0.0 && particles[0].Dy < 0.0);
 
             // Particle 1 reached the mouth, despawned, and respawned in the rectangular spawn area:
-            Assert.InRange(particles[1].Dx, KirbyTaskbarBuddyContext.INHALE_PARTICLE_MIN_DX, KirbyTaskbarBuddyContext.INHALE_PARTICLE_MAX_DX);
-            Assert.InRange(particles[1].Dy, KirbyTaskbarBuddyContext.INHALE_PARTICLE_MIN_DY, KirbyTaskbarBuddyContext.INHALE_PARTICLE_MAX_DY);
+            Assert.InRange(particles[1].Dx, InhaleParticleEffect.PARTICLE_MIN_DX, InhaleParticleEffect.PARTICLE_MAX_DX);
+            Assert.InRange(particles[1].Dy, InhaleParticleEffect.PARTICLE_MIN_DY, InhaleParticleEffect.PARTICLE_MAX_DY);
 
-            // 3. RenderInhaleParticlesTile rasterizes the 4 particles into a valid SpriteTile:
-            int[] scratch = new int[NativeMethods.TILE_SIZE * NativeMethods.TILE_SIZE];
-            SpriteTile reusableTile = new SpriteTile { PremulPixels = new int[NativeMethods.TILE_SIZE * NativeMethods.TILE_SIZE] };
-            SpriteTile rendered = SpriteLoader.RenderInhaleParticlesTile(particles, scratch, reusableTile);
+            // 3. RenderParticlesTile rasterizes the 4 particles into a valid SpriteTile:
+            int[] scratch = new int[CanvasConstants.TILE_SIZE * CanvasConstants.TILE_SIZE];
+            SpriteTile reusableTile = new SpriteTile { PremulPixels = new int[CanvasConstants.TILE_SIZE * CanvasConstants.TILE_SIZE] };
+            SpriteTile rendered = InhaleParticleEffect.RenderParticlesTile(particles, scratch, reusableTile);
 
             Assert.Same(reusableTile, rendered);
             Assert.True(rendered.Width >= 2 && rendered.Height >= 4);
-            Assert.InRange(rendered.MinX, 0, NativeMethods.TILE_SIZE - 1);
-            Assert.InRange(rendered.MinY, 0, NativeMethods.TILE_SIZE - 1);
+            Assert.InRange(rendered.MinX, 0, CanvasConstants.TILE_SIZE - 1);
+            Assert.InRange(rendered.MinY, 0, CanvasConstants.TILE_SIZE - 1);
+
+            // 4. InhaleParticleEffect instance steps and renders a SpriteTile:
+            InhaleParticleEffect effect = new InhaleParticleEffect(new System.Random(7));
+            effect.Reset();
+            Assert.True(effect.Step(1.0));
+            Assert.NotNull(effect.Render());
         }
 
         [Fact]
-        public void GetClipFrame_LoopsWhenLoopEnabled_AndClampsToFinalFrameWhenLoopDisabled()
+        public void GetFrame_LoopsWhenLoopEnabled_AndClampsToFinalFrameWhenLoopDisabled()
         {
             SpriteTile[] tiles = CreateDummyTiles(3);
             AnimClip loopClip = new AnimClip { Loop = true, RawFrames = tiles, Frames = tiles };
             AnimClip onceClip = new AnimClip { Loop = false, RawFrames = tiles, Frames = tiles };
 
-            Assert.Same(tiles[0], KirbyTaskbarBuddyContext.GetClipFrame(loopClip, 0.2));
-            Assert.Same(tiles[1], KirbyTaskbarBuddyContext.GetClipFrame(loopClip, 1.5));
-            Assert.Same(tiles[2], KirbyTaskbarBuddyContext.GetClipFrame(loopClip, 2.9));
-            Assert.Same(tiles[0], KirbyTaskbarBuddyContext.GetClipFrame(loopClip, 3.1));
+            Assert.Same(tiles[0], loopClip.GetFrame(0.2));
+            Assert.Same(tiles[1], loopClip.GetFrame(1.5));
+            Assert.Same(tiles[2], loopClip.GetFrame(2.9));
+            Assert.Same(tiles[0], loopClip.GetFrame(3.1));
 
-            Assert.Same(tiles[0], KirbyTaskbarBuddyContext.GetClipFrame(onceClip, 0.2));
-            Assert.Same(tiles[1], KirbyTaskbarBuddyContext.GetClipFrame(onceClip, 1.5));
-            Assert.Same(tiles[2], KirbyTaskbarBuddyContext.GetClipFrame(onceClip, 2.9));
-            Assert.Same(tiles[2], KirbyTaskbarBuddyContext.GetClipFrame(onceClip, 9.5));
-            Assert.Null(KirbyTaskbarBuddyContext.GetClipFrame(null, 0.0));
+            Assert.Same(tiles[0], onceClip.GetFrame(0.2));
+            Assert.Same(tiles[1], onceClip.GetFrame(1.5));
+            Assert.Same(tiles[2], onceClip.GetFrame(2.9));
+            Assert.Same(tiles[2], onceClip.GetFrame(9.5));
+            Assert.Null(AnimClip.GetFrame(null, 0.0));
 
             // GetVfxFrame loops when Loop is true, and returns null (despawning the VFX) once a non-looping clip completes.
-            Assert.Same(tiles[0], KirbyTaskbarBuddyContext.GetVfxFrame(loopClip, 3.1));
-            Assert.Same(tiles[2], KirbyTaskbarBuddyContext.GetVfxFrame(onceClip, 2.9));
-            Assert.Null(KirbyTaskbarBuddyContext.GetVfxFrame(onceClip, 3.0));
-            Assert.Null(KirbyTaskbarBuddyContext.GetVfxFrame(null, 0.0));
+            Assert.Same(tiles[0], loopClip.GetVfxFrame(3.1));
+            Assert.Same(tiles[2], onceClip.GetVfxFrame(2.9));
+            Assert.Null(onceClip.GetVfxFrame(3.0));
+            Assert.Null(AnimClip.GetVfxFrame(null, 0.0));
         }
 
         [Fact]
@@ -758,6 +764,24 @@ namespace KirbyTaskbarBuddy.Tests
                 SpriteTile tile = CreateDummyTiles(1)[0];
                 window.UpdateSpriteFrame(tile, 2, 100, 100);
                 Assert.False(window.IsCleared);
+
+                // RenderAtTaskbar with null tile clears the overlay; with a valid tile renders and clears IsCleared.
+                System.Drawing.Rectangle workArea = new System.Drawing.Rectangle(0, 0, 1920, 1040);
+                window.RenderAtTaskbar(null, 2, workArea, 200.0, 0.0);
+                Assert.True(window.IsCleared);
+                window.RenderAtTaskbar(tile, 2, workArea, 200.0, 0.0);
+                Assert.False(window.IsCleared);
+            }
+
+            using (OverlayStage stage = new OverlayStage(2))
+            {
+                Assert.NotNull(stage.EnemyLayer);
+                Assert.NotNull(stage.KirbyLayer);
+                Assert.NotNull(stage.VfxLayer);
+                stage.ClearAll(2);
+                Assert.True(stage.EnemyLayer.IsCleared);
+                Assert.True(stage.KirbyLayer.IsCleared);
+                Assert.True(stage.VfxLayer.IsCleared);
             }
         }
 

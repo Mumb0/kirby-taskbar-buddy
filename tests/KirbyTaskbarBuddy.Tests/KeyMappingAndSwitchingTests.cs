@@ -16,7 +16,7 @@ namespace KirbyTaskbarBuddy.Tests
             HashSet<string> mappedKeys = new HashSet<string>();
             for (int vk = 0; vk <= 0xFF; vk++)
             {
-                string keyName = NativeMethods.VkCodeToName(vk);
+                string keyName = KeyBindings.VkCodeToName(vk);
                 if (keyName != null)
                 {
                     mappedKeys.Add(keyName);
@@ -27,7 +27,7 @@ namespace KirbyTaskbarBuddy.Tests
             {
                 Assert.True(
                     mappedKeys.Contains(form.Key),
-                    string.Format("Form '{0}' with key '{1}' is not reachable from NativeMethods.VkCodeToName", form.Name, form.Key));
+                    string.Format("Form '{0}' with key '{1}' is not reachable from KeyBindings.VkCodeToName", form.Name, form.Key));
             }
         }
 
@@ -41,7 +41,7 @@ namespace KirbyTaskbarBuddy.Tests
 
             for (int vk = 0; vk <= 0xFF; vk++)
             {
-                string keyName = NativeMethods.VkCodeToName(vk);
+                string keyName = KeyBindings.VkCodeToName(vk);
                 if (keyName == null) continue;
 
                 if (vk == 0x20)
@@ -57,15 +57,15 @@ namespace KirbyTaskbarBuddy.Tests
             }
 
             // Both top-row '0' (0x30) and Numpad '0' (0x60) map to Normal Kirby ("0").
-            Assert.Equal("0", NativeMethods.VkCodeToName(0x30));
-            Assert.Equal("0", NativeMethods.VkCodeToName(0x60));
+            Assert.Equal("0", KeyBindings.VkCodeToName(0x30));
+            Assert.Equal("0", KeyBindings.VkCodeToName(0x60));
 
             // Unmapped keys and out-of-range VK codes return null without allocating strings.
-            Assert.Null(NativeMethods.VkCodeToName(0x49)); // 'I'
-            Assert.Null(NativeMethods.VkCodeToName(0x4B)); // 'K'
-            Assert.Null(NativeMethods.VkCodeToName(0x5A)); // 'Z'
-            Assert.Null(NativeMethods.VkCodeToName(0x1B)); // Escape
-            Assert.Null(NativeMethods.VkCodeToName(-1));
+            Assert.Null(KeyBindings.VkCodeToName(0x49)); // 'I'
+            Assert.Null(KeyBindings.VkCodeToName(0x4B)); // 'K'
+            Assert.Null(KeyBindings.VkCodeToName(0x5A)); // 'Z'
+            Assert.Null(KeyBindings.VkCodeToName(0x1B)); // Escape
+            Assert.Null(KeyBindings.VkCodeToName(-1));
         }
 
         [Fact]
@@ -79,27 +79,27 @@ namespace KirbyTaskbarBuddy.Tests
             FormDef current = normalForm;
 
             // Pressing "0" while already Normal stays Normal.
-            current = KirbyTaskbarBuddyContext.ResolveNextForm(keyToForm, current, "0");
+            current = KeyBindings.ResolveNextForm(keyToForm, current, "0");
             Assert.Same(normalForm, current);
 
             // Pressing Sword ("w") switches to Sword.
             FormDef swordForm = keyToForm["w"];
-            current = KirbyTaskbarBuddyContext.ResolveNextForm(keyToForm, current, "w");
+            current = KeyBindings.ResolveNextForm(keyToForm, current, "w");
             Assert.Same(swordForm, current);
 
             // Pressing Sword ("w") a second time toggles back to Normal.
-            current = KirbyTaskbarBuddyContext.ResolveNextForm(keyToForm, current, "w");
+            current = KeyBindings.ResolveNextForm(keyToForm, current, "w");
             Assert.Same(normalForm, current);
 
             // Switching directly from Sword ("w") to Fire ("d") and then pressing "0" returns to Normal.
             FormDef fireForm = keyToForm["d"];
-            current = KirbyTaskbarBuddyContext.ResolveNextForm(keyToForm, current, "w");
+            current = KeyBindings.ResolveNextForm(keyToForm, current, "w");
             Assert.Same(swordForm, current);
 
-            current = KirbyTaskbarBuddyContext.ResolveNextForm(keyToForm, current, "d");
+            current = KeyBindings.ResolveNextForm(keyToForm, current, "d");
             Assert.Same(fireForm, current);
 
-            current = KirbyTaskbarBuddyContext.ResolveNextForm(keyToForm, current, "0");
+            current = KeyBindings.ResolveNextForm(keyToForm, current, "0");
             Assert.Same(normalForm, current);
         }
 
@@ -115,10 +115,10 @@ namespace KirbyTaskbarBuddy.Tests
             {
                 if (form == normalForm) continue;
 
-                FormDef activated = KirbyTaskbarBuddyContext.ResolveNextForm(keyToForm, normalForm, form.Key);
+                FormDef activated = KeyBindings.ResolveNextForm(keyToForm, normalForm, form.Key);
                 Assert.Same(form, activated);
 
-                FormDef reverted = KirbyTaskbarBuddyContext.ResolveNextForm(keyToForm, activated, form.Key);
+                FormDef reverted = KeyBindings.ResolveNextForm(keyToForm, activated, form.Key);
                 Assert.Same(normalForm, reverted);
             }
         }
@@ -133,10 +133,10 @@ namespace KirbyTaskbarBuddy.Tests
 
             FormDef current = keyToForm["m"]; // Mirror
 
-            Assert.Same(current, KirbyTaskbarBuddyContext.ResolveNextForm(keyToForm, current, null));
-            Assert.Same(current, KirbyTaskbarBuddyContext.ResolveNextForm(keyToForm, current, " "));
-            Assert.Same(current, KirbyTaskbarBuddyContext.ResolveNextForm(keyToForm, current, "z"));
-            Assert.Same(current, KirbyTaskbarBuddyContext.ResolveNextForm(null, current, "w"));
+            Assert.Same(current, KeyBindings.ResolveNextForm(keyToForm, current, null));
+            Assert.Same(current, KeyBindings.ResolveNextForm(keyToForm, current, " "));
+            Assert.Same(current, KeyBindings.ResolveNextForm(keyToForm, current, "z"));
+            Assert.Same(current, KeyBindings.ResolveNextForm(null, current, "w"));
         }
     }
 }

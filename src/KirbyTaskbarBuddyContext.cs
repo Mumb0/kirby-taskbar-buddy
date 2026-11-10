@@ -40,14 +40,6 @@ namespace KirbyTaskbarBuddy {
         internal const int HIT_PUSHBACK_FRAMES = 8;
         internal const double HIT_PUSHBACK_SPEED = 1.5;
         internal const int ENEMY_HIT_FRAMES = 24;
-        internal const double INHALE_VFX_OFFSET_X = 36.0;
-        internal const double INHALE_VFX_OFFSET_Y = 0.0;
-        internal const int INHALE_PARTICLE_COUNT = 4;
-        internal const double INHALE_PARTICLE_SPEED = 2.4;
-        internal const double INHALE_PARTICLE_MIN_DX = 12.0;
-        internal const double INHALE_PARTICLE_MAX_DX = 52.0;
-        internal const double INHALE_PARTICLE_MIN_DY = -20.0;
-        internal const double INHALE_PARTICLE_MAX_DY = 20.0;
         internal static readonly double[] SleepTimeoutValues = new[] { 10.0, 30.0, 60.0, 180.0, 300.0, 600.0, -1.0 };
 
         // Static reference to the hook delegate prevents the GC from collecting the callback while unmanaged code holds it.
@@ -76,7 +68,7 @@ namespace KirbyTaskbarBuddy {
         private readonly MenuItem[] _sleepMenuItems;
         private readonly double[] _sleepTimeoutValues;
 
-        private readonly KirbyOverlayWindow _overlay;
+        private readonly OverlayStage _stage;
         private readonly Timer _animTimer;
         private readonly Stopwatch _stopwatch;
         private long _lastTickMs;
@@ -87,16 +79,12 @@ namespace KirbyTaskbarBuddy {
 
         private readonly List<EnemyDef> _enemies = new List<EnemyDef>();
         private readonly Random _rng = new Random();
-        private readonly KirbyOverlayWindow _enemyOverlay;
         private EnemyDef _activeEnemy;
         private double _enemyX;
         private double _enemyAnimTime;
         private bool _isEnemyHit;
         private double _enemyHitAnimTime;
         private double _enemySpawnTimerSeconds;
-        private int _lastEnemyRenderedX = int.MinValue;
-        private int _lastEnemyRenderedY = int.MinValue;
-        private SpriteTile _lastEnemyRenderedTile;
 
         private readonly SpriteTile[] _sleepFrames;
         private SleepState _sleepState = SleepState.Awake;
@@ -111,35 +99,14 @@ namespace KirbyTaskbarBuddy {
         private bool _isHit;
         private double _hitAnimTime;
 
-        private readonly KirbyOverlayWindow _vfxOverlay;
-        private readonly InhaleParticle[] _inhaleParticles = new InhaleParticle[INHALE_PARTICLE_COUNT];
-        private readonly int[] _inhaleVfxScratch = new int[NativeMethods.TILE_SIZE * NativeMethods.TILE_SIZE];
-        private readonly SpriteTile _inhaleVfxTileA = new SpriteTile
-        {
-            PremulPixels = new int[NativeMethods.TILE_SIZE * NativeMethods.TILE_SIZE]
-        };
-        private readonly SpriteTile _inhaleVfxTileB = new SpriteTile
-        {
-            PremulPixels = new int[NativeMethods.TILE_SIZE * NativeMethods.TILE_SIZE]
-        };
-        private bool _useInhaleTileB;
-        private SpriteTile _activeVfxTile;
-        private AnimClip _activeVfxClip;
-        private double _vfxX;
-        private double _vfxY;
-        private double _vfxAnimTime;
-        private int _lastVfxRenderedX = int.MinValue;
-        private int _lastVfxRenderedY = int.MinValue;
-        private SpriteTile _lastVfxRenderedTile;
+        private readonly InhaleParticleEffect _inhaleVfx;
+        private IVfxEffect _activeVfx;
 
         private double _kirbyX = -64;
         private double _animTime;
         private bool _isJumping;
         private double _jumpY;
         private double _jumpVelY;
-        private int _lastRenderedX = int.MinValue;
-        private int _lastRenderedY = int.MinValue;
-        private SpriteTile _lastRenderedTile;
         private IntPtr _lastForegroundWindow = IntPtr.Zero;
 
         // Throttles fullscreen and screen working-area queries to once every 15 ticks (~240ms)
@@ -159,6 +126,7 @@ namespace KirbyTaskbarBuddy {
             SpriteLoader.LoadAllSpritesheets(_forms, _enemies, out _sleepFrames, out _loadedTrayIcon, out _trayIconHandle);
             LoadSettings();
             _kirbyX = -32 * _scale;
+            _inhaleVfx = new InhaleParticleEffect(_rng);
             _enemySpawnTimerSeconds = NextEnemySpawnInterval(_rng, ENEMY_SPAWN_MIN_SECONDS, ENEMY_SPAWN_MAX_SECONDS);
 
             _overlayItem = new MenuItem("Show Foreground Taskbar Kirby", OnToggleOverlay) { Checked = _overlayEnabled };
@@ -226,23 +194,7 @@ namespace KirbyTaskbarBuddy {
             Screen primaryScreen = Screen.PrimaryScreen;
             _cachedWorkArea = primaryScreen != null ? primaryScreen.WorkingArea : new Rectangle(0, 0, 1920, 1080);
 
-            // Initialize layered surfaces (SourceConstantAlpha = 0 off-screen) before calling Show()
-            // so Windows/DWM never maps an uninitialized layered HWND, ordered back-to-front:
-            // _enemyOverlay -> _overlay (Kirby) -> _vfxOverlay (inhale wind / attack VFX).
-            _enemyOverlay = new KirbyOverlayWindow();
-            IntPtr enemyHandle = _enemyOverlay.Handle;
-            _enemyOverlay.ClearOverlay(_scale);
-            _enemyOverlay.Show();
-
-            _overlay = new KirbyOverlayWindow();
-            IntPtr overlayHandle = _overlay.Handle;
-            _overlay.ClearOverlay(_scale);
-            _overlay.Show();
-
-            _vfxOverlay = new KirbyOverlayWindow();
-            IntPtr vfxHandle = _vfxOverlay.Handle;
-            _vfxOverlay.ClearOverlay(_scale);
-            _vfxOverlay.Show();
+            _stage = new OverlayStage(_scale);
 
             _stopwatch = Stopwatch.StartNew();
             _lastTickMs = _stopwatch.ElapsedMilliseconds;
@@ -265,15 +217,15 @@ namespace KirbyTaskbarBuddy {
             _hookID = NativeMethods.SetWindowsHookEx(NativeMethods.WH_KEYBOARD_LL, _proc, NativeMethods.GetModuleHandle(null),
                 0);
 
-            NativeMethods.TrimMemory();
+            Diagnostics.TrimMemory();
         }
 
         /// <summary>
         /// Marshals a clean shutdown onto the UI thread when signaled by a newly launched instance.
         /// </summary>
         public void RequestCleanExit() {
-            if (_overlay != null && _overlay.IsHandleCreated) {
-                _overlay.BeginInvoke(new Action(() => OnExit(null, EventArgs.Empty)));
+            if (_stage != null) {
+                _stage.BeginInvokeOnUiThread(() => OnExit(null, EventArgs.Empty));
             }
         }
 
@@ -394,16 +346,16 @@ namespace KirbyTaskbarBuddy {
                 }
             }
             catch (SecurityException ex) {
-                NativeMethods.LogWarning("KirbyTaskbarBuddyContext.LoadSettings", ex);
+                Diagnostics.LogWarning("KirbyTaskbarBuddyContext.LoadSettings", ex);
             }
             catch (UnauthorizedAccessException ex) {
-                NativeMethods.LogWarning("KirbyTaskbarBuddyContext.LoadSettings", ex);
+                Diagnostics.LogWarning("KirbyTaskbarBuddyContext.LoadSettings", ex);
             }
             catch (IOException ex) {
-                NativeMethods.LogWarning("KirbyTaskbarBuddyContext.LoadSettings", ex);
+                Diagnostics.LogWarning("KirbyTaskbarBuddyContext.LoadSettings", ex);
             }
             catch (ObjectDisposedException ex) {
-                NativeMethods.LogWarning("KirbyTaskbarBuddyContext.LoadSettings", ex);
+                Diagnostics.LogWarning("KirbyTaskbarBuddyContext.LoadSettings", ex);
             }
         }
 
@@ -418,16 +370,16 @@ namespace KirbyTaskbarBuddy {
                 }
             }
             catch (SecurityException ex) {
-                NativeMethods.LogWarning("KirbyTaskbarBuddyContext.SaveSettings", ex);
+                Diagnostics.LogWarning("KirbyTaskbarBuddyContext.SaveSettings", ex);
             }
             catch (UnauthorizedAccessException ex) {
-                NativeMethods.LogWarning("KirbyTaskbarBuddyContext.SaveSettings", ex);
+                Diagnostics.LogWarning("KirbyTaskbarBuddyContext.SaveSettings", ex);
             }
             catch (IOException ex) {
-                NativeMethods.LogWarning("KirbyTaskbarBuddyContext.SaveSettings", ex);
+                Diagnostics.LogWarning("KirbyTaskbarBuddyContext.SaveSettings", ex);
             }
             catch (ObjectDisposedException ex) {
-                NativeMethods.LogWarning("KirbyTaskbarBuddyContext.SaveSettings", ex);
+                Diagnostics.LogWarning("KirbyTaskbarBuddyContext.SaveSettings", ex);
             }
         }
 
@@ -443,11 +395,8 @@ namespace KirbyTaskbarBuddy {
             _scale2xItem.Checked = _scale == 2;
             _scale3xItem.Checked = _scale == 3;
             _scale4xItem.Checked = _scale == 4;
-            _lastRenderedTile = null;
-            _lastEnemyRenderedTile = null;
-            _lastVfxRenderedTile = null;
             SaveSettings();
-            NativeMethods.TrimMemory();
+            Diagnostics.TrimMemory();
         }
 
         private void SetSleepTimeout(double seconds) {
@@ -743,69 +692,6 @@ namespace KirbyTaskbarBuddy {
         }
 
         /// <summary>
-        /// Resolves the <see cref="SpriteTile"/> for <paramref name="clip"/> at <paramref name="animTime"/>,
-        /// wrapping modulo frame count when <see cref="AnimClip.Loop"/> is <c>true</c> or clamping to the last frame when <c>false</c>.
-        /// </summary>
-        internal static SpriteTile GetClipFrame(AnimClip clip, double animTime) {
-            if (clip == null || !clip.HasFrames()) {
-                return null;
-            }
-
-            SpriteTile[] frames = clip.Frames;
-            int frameCount = frames.Length;
-            int idx = (int)Math.Floor(animTime);
-
-            if (clip.Loop) {
-                idx %= frameCount;
-
-                if (idx < 0) {
-                    idx += frameCount;
-                }
-            }
-            else {
-                if (idx < 0) {
-                    idx = 0;
-                }
-                else if (idx >= frameCount) {
-                    idx = frameCount - 1;
-                }
-            }
-
-            return frames[idx];
-        }
-
-        /// <summary>
-        /// Resolves the <see cref="SpriteTile"/> for a visual effect <paramref name="clip"/> at <paramref name="animTime"/>,
-        /// wrapping when <see cref="AnimClip.Loop"/> is <c>true</c> or returning <c>null</c> (despawning the VFX)
-        /// once <paramref name="animTime"/> completes all frames of a non-looping clip.
-        /// </summary>
-        internal static SpriteTile GetVfxFrame(AnimClip clip, double animTime) {
-            if (clip == null || !clip.HasFrames()) {
-                return null;
-            }
-
-            SpriteTile[] frames = clip.Frames;
-            int frameCount = frames.Length;
-            int idx = (int)Math.Floor(animTime);
-
-            if (clip.Loop) {
-                idx %= frameCount;
-
-                if (idx < 0) {
-                    idx += frameCount;
-                }
-
-                return frames[idx];
-            }
-
-            if (idx < 0 || idx >= frameCount) {
-                return null;
-            }
-
-            return frames[idx];
-        }
-
-        /// <summary>
         /// Checks whether Kirby can begin inhaling an approaching enemy: Kirby must be awake, on the ground,
         /// not guarding, in Normal form with an <see cref="FormDef.Inhale"/> clip, and the enemy must be in front
         /// of Kirby within <see cref="INHALE_RANGE"/>.
@@ -837,88 +723,6 @@ namespace KirbyTaskbarBuddy {
 
             double dist = enemyX - kirbyX;
             return dist >= 0.0 && dist <= INHALE_RANGE * scale;
-        }
-
-        /// <summary>
-        /// Spawns a single inhale wind particle at a random position within the rectangular inhale area
-        /// in front of Kirby's mouth (<c>[INHALE_PARTICLE_MIN_DX, INHALE_PARTICLE_MAX_DX] x [INHALE_PARTICLE_MIN_DY, INHALE_PARTICLE_MAX_DY]</c>).
-        /// </summary>
-        internal static InhaleParticle SpawnInhaleParticle(Random rng) {
-            double rx = rng != null ? rng.NextDouble() : 0.5;
-            double ry = rng != null ? rng.NextDouble() : 0.5;
-            double dx = INHALE_PARTICLE_MIN_DX + rx * (INHALE_PARTICLE_MAX_DX - INHALE_PARTICLE_MIN_DX);
-            double dy = INHALE_PARTICLE_MIN_DY + ry * (INHALE_PARTICLE_MAX_DY - INHALE_PARTICLE_MIN_DY);
-            return new InhaleParticle
-            {
-                Dx = dx,
-                Dy = dy,
-                BlackOnTop = dy <= 0.0
-            };
-        }
-
-        /// <summary>
-        /// Spawns all initial (<see cref="INHALE_PARTICLE_COUNT"/> = 4) inhale wind particles at random positions
-        /// in the rectangular area in front of Kirby when the inhale animation starts.
-        /// </summary>
-        internal static void InitInhaleParticles(InhaleParticle[] particles, Random rng) {
-            if (particles == null) {
-                return;
-            }
-
-            for (int i = 0; i < particles.Length; i++) {
-                particles[i] = SpawnInhaleParticle(rng);
-            }
-        }
-
-        /// <summary>
-        /// Moves each individual inhale particle straight toward Kirby's mouth (<c>Dx = 0, Dy = 0</c>) by
-        /// <c>INHALE_PARTICLE_SPEED * delta60</c>. As soon as a particle reaches the mouth and despawns,
-        /// a new particle is immediately spawned at a random position in the rectangular inhale area.
-        /// </summary>
-        internal static void StepInhaleParticles(InhaleParticle[] particles, double delta60, Random rng) {
-            if (particles == null || delta60 <= 0.0) {
-                return;
-            }
-
-            double step = INHALE_PARTICLE_SPEED * delta60;
-
-            for (int i = 0; i < particles.Length; i++) {
-                double dx = particles[i].Dx;
-                double dy = particles[i].Dy;
-                double dist = Math.Sqrt(dx * dx + dy * dy);
-
-                if (dist <= step || dist <= 1.0) {
-                    particles[i] = SpawnInhaleParticle(rng);
-                }
-                else {
-                    particles[i].Dx = dx - dx / dist * step;
-                    particles[i].Dy = dy - dy / dist * step;
-                }
-            }
-        }
-
-        /// <summary>
-        /// Resolves the <see cref="FormDef"/> Kirby should transform into after swallowing <paramref name="swallowedEnemy"/>.
-        /// Returns the matching ability form if <see cref="EnemyDef.CopyAbility"/> is defined and registered in <paramref name="forms"/>,
-        /// or <paramref name="currentForm"/> if the enemy grants no ability.
-        /// </summary>
-        internal static FormDef ResolveSwallowedForm(
-            IList<FormDef> forms,
-            FormDef currentForm,
-            EnemyDef swallowedEnemy) {
-            if (forms == null || swallowedEnemy == null || string.IsNullOrEmpty(swallowedEnemy.CopyAbility)) {
-                return currentForm;
-            }
-
-            for (int i = 0; i < forms.Count; i++) {
-                FormDef candidate = forms[i];
-
-                if (candidate != null && candidate.Name == swallowedEnemy.CopyAbility) {
-                    return candidate;
-                }
-            }
-
-            return currentForm;
         }
 
         /// <summary>
@@ -986,7 +790,7 @@ namespace KirbyTaskbarBuddy {
 
             if (swallowState == SwallowState.Swallowing) {
                 if (swallowClip == null || !swallowClip.HasFrames()) {
-                    currentForm = ResolveSwallowedForm(forms, currentForm, swallowedEnemy);
+                    currentForm = FormDefinitions.ResolveSwallowedForm(forms, currentForm, swallowedEnemy);
                     swallowedEnemy = null;
                     swallowState = SwallowState.None;
                     swallowAnimTime = 0.0;
@@ -1000,7 +804,7 @@ namespace KirbyTaskbarBuddy {
                     return swallowClip.Frames[Math.Max(0, idx)];
                 }
 
-                currentForm = ResolveSwallowedForm(forms, currentForm, swallowedEnemy);
+                currentForm = FormDefinitions.ResolveSwallowedForm(forms, currentForm, swallowedEnemy);
                 swallowedEnemy = null;
                 swallowState = SwallowState.None;
                 swallowAnimTime = 0.0;
@@ -1008,24 +812,6 @@ namespace KirbyTaskbarBuddy {
             }
 
             return null;
-        }
-
-        /// <summary>
-        /// Resolves the Normal Kirby <see cref="FormDef"/> (<c>"normal"</c>) from <paramref name="forms"/>,
-        /// or returns <paramref name="fallbackForm"/> if not found.
-        /// </summary>
-        internal static FormDef ResolveNormalForm(IList<FormDef> forms, FormDef fallbackForm) {
-            if (forms != null) {
-                for (int i = 0; i < forms.Count; i++) {
-                    FormDef candidate = forms[i];
-
-                    if (candidate != null && candidate.Name == "normal") {
-                        return candidate;
-                    }
-                }
-            }
-
-            return fallbackForm;
         }
 
         /// <summary>
@@ -1076,7 +862,7 @@ namespace KirbyTaskbarBuddy {
                 return false;
             }
 
-            currentForm = ResolveNormalForm(forms, currentForm);
+            currentForm = FormDefinitions.ResolveNormalForm(forms, currentForm);
             isHit = true;
             hitAnimTime = 0.0;
             isEnemyHit = true;
@@ -1126,11 +912,11 @@ namespace KirbyTaskbarBuddy {
             return frame;
         }
 
-        private void StepHitEnemyOnContact(double delta60, Rectangle workArea, int halfWidth) {
+        private void StepHitEnemyOnContact(double delta60, Rectangle workArea) {
             _enemyAnimTime = 0.0;
 
             if (StepHitEnemyPhysics(ref _enemyX, ref _enemyHitAnimTime, _activeEnemy, delta60, _scale)) {
-                RenderActiveEnemy(workArea, halfWidth, true);
+                RenderActiveEnemy(workArea, true);
             }
         }
 
@@ -1194,33 +980,23 @@ namespace KirbyTaskbarBuddy {
                 if (fg != _lastForegroundWindow) {
                     _lastForegroundWindow = fg;
 
-                    if (_overlayEnabled && !_isFullscreenCached) {
-                        RefreshTopmostOrder();
+                    if (_overlayEnabled && !_isFullscreenCached && _stage != null) {
+                        _stage.RefreshTopmostOrder();
                     }
                 }
             }
 
+            if (_stage == null) {
+                return;
+            }
+
             if (!_overlayEnabled || _isFullscreenCached) {
-                if (!_overlay.IsCleared) {
-                    _overlay.ClearOverlay(_scale);
-                    _lastRenderedTile = null;
-                }
-
-                if (_enemyOverlay != null && !_enemyOverlay.IsCleared) {
-                    _enemyOverlay.ClearOverlay(_scale);
-                    _lastEnemyRenderedTile = null;
-                }
-
-                if (_vfxOverlay != null && !_vfxOverlay.IsCleared) {
-                    _vfxOverlay.ClearOverlay(_scale);
-                    _lastVfxRenderedTile = null;
-                }
-
+                _stage.ClearAll(_scale);
                 return;
             }
 
             Rectangle workArea = _cachedWorkArea;
-            int halfWidth = NativeMethods.TILE_SIZE / 2 * _scale;
+            int halfWidth = CanvasConstants.TILE_SIZE / 2 * _scale;
             double delta60 = dtSeconds * 60.0;
 
             UpdateEnemy(dtSeconds, delta60, workArea, halfWidth);
@@ -1244,12 +1020,11 @@ namespace KirbyTaskbarBuddy {
                         ref _hitAnimTime, ref _activeEnemy, ref _isEnemyHit, ref _enemyHitAnimTime, _kirbyX, _enemyX,
                         _scale, isGuarding)) {
                     _animTime = 0.0;
-                    StepHitEnemyOnContact(delta60, workArea, halfWidth);
+                    StepHitEnemyOnContact(delta60, workArea);
                 }
 
                 if (_isHit) {
-                    _activeVfxTile = null;
-                    _activeVfxClip = null;
+                    _activeVfx = null;
                     frameToRender = AdvanceHitState(ref _isHit, ref _hitAnimTime, ref _kirbyX, delta60, _currentForm,
                         _scale);
                 }
@@ -1261,8 +1036,8 @@ namespace KirbyTaskbarBuddy {
                         _scale, isGuarding, _isEnemyHit)) {
                     _swallowState = SwallowState.Inhaling;
                     _swallowAnimTime = 0.0;
-                    _vfxAnimTime = 0.0;
-                    InitInhaleParticles(_inhaleParticles, _rng);
+                    _inhaleVfx.Reset();
+                    _activeVfx = _inhaleVfx;
                     startedInhaleThisTick = true;
                 }
 
@@ -1271,29 +1046,21 @@ namespace KirbyTaskbarBuddy {
                         _currentForm.Inhale == null || !_currentForm.Inhale.HasFrames()) {
                         _swallowState = SwallowState.None;
                         _swallowAnimTime = 0.0;
-                        _activeVfxTile = null;
-                        _activeVfxClip = null;
+                        _activeVfx = null;
                     }
                     else {
                         _swallowAnimTime += _currentForm.Inhale.Speed * delta60;
-                        frameToRender = GetClipFrame(_currentForm.Inhale, _swallowAnimTime);
+                        frameToRender = _currentForm.Inhale.GetFrame(_swallowAnimTime);
 
                         if (!startedInhaleThisTick) {
-                            StepInhaleParticles(_inhaleParticles, delta60, _rng);
+                            _inhaleVfx.Step(delta60);
                         }
 
-                        _useInhaleTileB = !_useInhaleTileB;
-                        SpriteTile targetVfxTile = _useInhaleTileB ? _inhaleVfxTileB : _inhaleVfxTileA;
-                        _activeVfxTile = SpriteLoader.RenderInhaleParticlesTile(_inhaleParticles, _inhaleVfxScratch,
-                            targetVfxTile);
-                        _activeVfxClip = null;
-                        _vfxX = _kirbyX + INHALE_VFX_OFFSET_X * _scale;
-                        _vfxY = INHALE_VFX_OFFSET_Y;
+                        _activeVfx = _inhaleVfx;
                     }
                 }
                 else if (_swallowState == SwallowState.Mouthful || _swallowState == SwallowState.Swallowing) {
-                    _activeVfxTile = null;
-                    _activeVfxClip = null;
+                    _activeVfx = null;
                     FormDef prevForm = _currentForm;
                     frameToRender = AdvanceSwallowState(ref _swallowState, ref _swallowAnimTime, delta60,
                         ref _currentForm, _forms, ref _swallowedEnemy);
@@ -1304,8 +1071,7 @@ namespace KirbyTaskbarBuddy {
                 }
 
                 if (_swallowState == SwallowState.None && !_isHit) {
-                    _activeVfxTile = null;
-                    _activeVfxClip = null;
+                    _activeVfx = null;
 
                     bool useJump = _isJumping && _currentForm.Jump != null && _currentForm.Jump.HasFrames(5);
                     bool useGuard = !useJump && isGuarding;
@@ -1333,7 +1099,7 @@ namespace KirbyTaskbarBuddy {
                             ref _isHit, ref _hitAnimTime, ref _activeEnemy, ref _isEnemyHit, ref _enemyHitAnimTime,
                             _kirbyX, _enemyX, _scale, useGuard)) {
                         _animTime = 0.0;
-                        StepHitEnemyOnContact(delta60, workArea, halfWidth);
+                        StepHitEnemyOnContact(delta60, workArea);
                         frameToRender = AdvanceHitState(ref _isHit, ref _hitAnimTime, ref _kirbyX, delta60,
                             _currentForm, _scale);
                     }
@@ -1341,86 +1107,40 @@ namespace KirbyTaskbarBuddy {
                         frameToRender = activeClip.Frames[GetJumpFrameIndex(_jumpVelY)];
                     }
                     else {
-                        frameToRender = GetClipFrame(activeClip, _animTime);
+                        frameToRender = AnimClip.GetFrame(activeClip, _animTime);
                     }
                 }
             }
             else {
-                _activeVfxTile = null;
-                _activeVfxClip = null;
+                _activeVfx = null;
             }
 
             if (frameToRender == null) {
                 return;
             }
 
-            int screenX = (int)Math.Round(_kirbyX) - halfWidth;
-            int screenY = workArea.Bottom - (NativeMethods.PIVOT_Y + 1) * _scale - (int)Math.Round(_jumpY * _scale);
-
-            if (screenX != _lastRenderedX || screenY != _lastRenderedY || frameToRender != _lastRenderedTile ||
-                _overlay.IsCleared) {
-                _overlay.UpdateSpriteFrame(frameToRender, _scale, screenX, screenY);
-                _lastRenderedX = screenX;
-                _lastRenderedY = screenY;
-                _lastRenderedTile = frameToRender;
-            }
-
-            UpdateVfx(workArea, halfWidth);
+            _stage.KirbyLayer.RenderAtTaskbar(frameToRender, _scale, workArea, _kirbyX, _jumpY);
+            UpdateVfx(workArea);
         }
 
         /// <summary>
-        /// Re-asserts <c>HWND_TOPMOST</c> when the foreground window changes so clicking the taskbar
-        /// does not cover Kirby or active enemies, ordered back-to-front:
-        /// <see cref="_enemyOverlay"/> -> <see cref="_overlay"/> -> <see cref="_vfxOverlay"/>.
+        /// Renders the currently active visual effect (<see cref="_activeVfx"/>, such as Kirby's inhale wind
+        /// or copy ability attack particles) onto <see cref="OverlayStage.VfxLayer"/>, or clears the layer when inactive.
         /// </summary>
-        private void RefreshTopmostOrder() {
-            if (_overlay == null || !_overlay.IsHandleCreated) {
+        private void UpdateVfx(Rectangle workArea) {
+            if (_stage == null || _stage.VfxLayer == null) {
                 return;
             }
 
-            IntPtr hwndTopMost = new IntPtr(-1);
-
-            if (_enemyOverlay != null && _enemyOverlay.IsHandleCreated) {
-                NativeMethods.SetWindowPos(_enemyOverlay.Handle, hwndTopMost, 0, 0, 0, 0, NativeMethods.TOPMOST_FLAGS);
-            }
-
-            NativeMethods.SetWindowPos(_overlay.Handle, hwndTopMost, 0, 0, 0, 0, NativeMethods.TOPMOST_FLAGS);
-
-            if (_vfxOverlay != null && _vfxOverlay.IsHandleCreated) {
-                NativeMethods.SetWindowPos(_vfxOverlay.Handle, hwndTopMost, 0, 0, 0, 0, NativeMethods.TOPMOST_FLAGS);
-            }
-        }
-
-        /// <summary>
-        /// Renders the currently active visual effect (<see cref="_activeVfxClip"/>, such as Kirby's inhale wind
-        /// or copy ability attack particles) onto <see cref="_vfxOverlay"/>, or clears the overlay when inactive.
-        /// </summary>
-        private void UpdateVfx(Rectangle workArea, int halfWidth) {
-            if (_vfxOverlay == null) {
-                return;
-            }
-
-            SpriteTile vfxTile = _activeVfxTile ?? GetVfxFrame(_activeVfxClip, _vfxAnimTime);
+            SpriteTile vfxTile = _activeVfx != null ? _activeVfx.Render() : null;
 
             if (vfxTile == null) {
-                if (!_vfxOverlay.IsCleared) {
-                    _vfxOverlay.ClearOverlay(_scale);
-                    _lastVfxRenderedTile = null;
-                }
-
+                _stage.VfxLayer.ClearOverlay(_scale);
                 return;
             }
 
-            int vfxScreenX = (int)Math.Round(_vfxX) - halfWidth;
-            int vfxScreenY = workArea.Bottom - (NativeMethods.PIVOT_Y + 1) * _scale - (int)Math.Round(_vfxY * _scale);
-
-            if (vfxScreenX != _lastVfxRenderedX || vfxScreenY != _lastVfxRenderedY ||
-                vfxTile != _lastVfxRenderedTile || _vfxOverlay.IsCleared) {
-                _vfxOverlay.UpdateSpriteFrame(vfxTile, _scale, vfxScreenX, vfxScreenY);
-                _lastVfxRenderedX = vfxScreenX;
-                _lastVfxRenderedY = vfxScreenY;
-                _lastVfxRenderedTile = vfxTile;
-            }
+            double vfxWorldX = _kirbyX + _activeVfx.OffsetX * _scale;
+            _stage.VfxLayer.RenderAtTaskbar(vfxTile, _scale, workArea, vfxWorldX, _activeVfx.OffsetY);
         }
 
         /// <summary>
@@ -1428,12 +1148,12 @@ namespace KirbyTaskbarBuddy {
         /// walks it left across the taskbar (even while Kirby is napping), and despawns it off the left edge.
         /// </summary>
         private void UpdateEnemy(double dtSeconds, double delta60, Rectangle workArea, int halfWidth) {
-            if (!_combatEnabled || _enemyOverlay == null || _enemies.Count == 0) {
-                if (_enemyOverlay != null && !_enemyOverlay.IsCleared) {
-                    _enemyOverlay.ClearOverlay(_scale);
-                    _lastEnemyRenderedTile = null;
-                }
+            if (_stage == null || _stage.EnemyLayer == null) {
+                return;
+            }
 
+            if (!_combatEnabled || _enemies.Count == 0) {
+                _stage.EnemyLayer.ClearOverlay(_scale);
                 return;
             }
 
@@ -1446,7 +1166,6 @@ namespace KirbyTaskbarBuddy {
                     _enemyAnimTime = 0.0;
                     _isEnemyHit = false;
                     _enemyHitAnimTime = 0.0;
-                    _lastEnemyRenderedTile = null;
                 }
                 else {
                     return;
@@ -1466,46 +1185,32 @@ namespace KirbyTaskbarBuddy {
                     _swallowedEnemy = _activeEnemy;
                     _swallowState = SwallowState.Mouthful;
                     _swallowAnimTime = 0.0;
-                    _activeVfxTile = null;
-                    _activeVfxClip = null;
+                    _activeVfx = null;
                 }
 
                 _activeEnemy = null;
                 _isEnemyHit = false;
                 _enemyHitAnimTime = 0.0;
-                _lastEnemyRenderedTile = null;
-
-                if (!_enemyOverlay.IsCleared) {
-                    _enemyOverlay.ClearOverlay(_scale);
-                }
+                _stage.EnemyLayer.ClearOverlay(_scale);
 
                 _enemySpawnTimerSeconds = NextEnemySpawnInterval(_rng, ENEMY_SPAWN_MIN_SECONDS, ENEMY_SPAWN_MAX_SECONDS);
                 return;
             }
 
-            RenderActiveEnemy(workArea, halfWidth, isBeingInhaled || _isEnemyHit);
+            RenderActiveEnemy(workArea, isBeingInhaled || _isEnemyHit);
         }
 
-        private void RenderActiveEnemy(Rectangle workArea, int halfWidth, bool useHitOrInhaledPose) {
-            if (_activeEnemy == null || _enemyOverlay == null) {
+        private void RenderActiveEnemy(Rectangle workArea, bool useHitOrInhaledPose) {
+            if (_activeEnemy == null || _stage == null || _stage.EnemyLayer == null) {
                 return;
             }
 
             AnimClip enemyClip = useHitOrInhaledPose && _activeEnemy.Inhaled != null && _activeEnemy.Inhaled.HasFrames()
                 ? _activeEnemy.Inhaled
                 : _activeEnemy.Walk;
-            SpriteTile enemyTile = GetClipFrame(enemyClip, _enemyAnimTime);
+            SpriteTile enemyTile = AnimClip.GetFrame(enemyClip, _enemyAnimTime);
 
-            int enemyScreenX = (int)Math.Round(_enemyX) - halfWidth;
-            int enemyScreenY = workArea.Bottom - (NativeMethods.PIVOT_Y + 1) * _scale;
-
-            if (enemyScreenX != _lastEnemyRenderedX || enemyScreenY != _lastEnemyRenderedY ||
-                enemyTile != _lastEnemyRenderedTile || _enemyOverlay.IsCleared) {
-                _enemyOverlay.UpdateSpriteFrame(enemyTile, _scale, enemyScreenX, enemyScreenY);
-                _lastEnemyRenderedX = enemyScreenX;
-                _lastEnemyRenderedY = enemyScreenY;
-                _lastEnemyRenderedTile = enemyTile;
-            }
+            _stage.EnemyLayer.RenderAtTaskbar(enemyTile, _scale, workArea, _enemyX, 0.0);
         }
 
         /// <summary>
@@ -1547,15 +1252,7 @@ namespace KirbyTaskbarBuddy {
                 return false;
             }
 
-            if (_overlay != null && _overlay.IsHandleCreated && fg == _overlay.Handle) {
-                return false;
-            }
-
-            if (_enemyOverlay != null && _enemyOverlay.IsHandleCreated && fg == _enemyOverlay.Handle) {
-                return false;
-            }
-
-            if (_vfxOverlay != null && _vfxOverlay.IsHandleCreated && fg == _vfxOverlay.Handle) {
+            if (_stage != null && _stage.OwnsWindowHandle(fg)) {
                 return false;
             }
 
@@ -1619,31 +1316,11 @@ namespace KirbyTaskbarBuddy {
                 return;
             }
 
-            FormDef nextForm = ResolveNextForm(_keyToForm, _currentForm, keyName);
+            FormDef nextForm = KeyBindings.ResolveNextForm(_keyToForm, _currentForm, keyName);
 
             if (nextForm != null && nextForm != _currentForm) {
                 _currentForm = nextForm;
             }
-        }
-
-        /// <summary>
-        /// Resolves the next <see cref="FormDef"/> for a given ability key press.
-        /// Pressing the currently active copy ability's key a second time reverts Kirby to Normal form (<c>"0"</c>).
-        /// </summary>
-        internal static FormDef ResolveNextForm(Dictionary<string, FormDef> keyToForm, FormDef currentForm, string keyName) {
-            if (keyToForm == null || keyName == null) {
-                return currentForm;
-            }
-
-            FormDef target;
-
-            if (!keyToForm.TryGetValue(keyName, out target)) {
-                return currentForm;
-            }
-
-            FormDef normalForm;
-            keyToForm.TryGetValue("0", out normalForm);
-            return currentForm == target && target != normalForm ? normalForm : target;
         }
 
         private void OnToggleOverlay(object sender, EventArgs e) {
@@ -1660,21 +1337,20 @@ namespace KirbyTaskbarBuddy {
                 _swallowedEnemy = null;
                 _isEnemyHit = false;
                 _enemyHitAnimTime = 0.0;
-                _lastEnemyRenderedTile = null;
                 _swallowState = SwallowState.None;
                 _swallowAnimTime = 0.0;
                 _isHit = false;
                 _hitAnimTime = 0.0;
-                _activeVfxTile = null;
-                _activeVfxClip = null;
-                _lastVfxRenderedTile = null;
+                _activeVfx = null;
 
-                if (_enemyOverlay != null && !_enemyOverlay.IsCleared) {
-                    _enemyOverlay.ClearOverlay(_scale);
-                }
+                if (_stage != null) {
+                    if (_stage.EnemyLayer != null) {
+                        _stage.EnemyLayer.ClearOverlay(_scale);
+                    }
 
-                if (_vfxOverlay != null && !_vfxOverlay.IsCleared) {
-                    _vfxOverlay.ClearOverlay(_scale);
+                    if (_stage.VfxLayer != null) {
+                        _stage.VfxLayer.ClearOverlay(_scale);
+                    }
                 }
 
                 _enemySpawnTimerSeconds = NextEnemySpawnInterval(_rng, ENEMY_SPAWN_MIN_SECONDS, ENEMY_SPAWN_MAX_SECONDS);
@@ -1696,19 +1372,19 @@ namespace KirbyTaskbarBuddy {
                 }
             }
             catch (SecurityException ex) {
-                NativeMethods.LogWarning("KirbyTaskbarBuddyContext.IsStartupEnabled", ex);
+                Diagnostics.LogWarning("KirbyTaskbarBuddyContext.IsStartupEnabled", ex);
                 return false;
             }
             catch (UnauthorizedAccessException ex) {
-                NativeMethods.LogWarning("KirbyTaskbarBuddyContext.IsStartupEnabled", ex);
+                Diagnostics.LogWarning("KirbyTaskbarBuddyContext.IsStartupEnabled", ex);
                 return false;
             }
             catch (IOException ex) {
-                NativeMethods.LogWarning("KirbyTaskbarBuddyContext.IsStartupEnabled", ex);
+                Diagnostics.LogWarning("KirbyTaskbarBuddyContext.IsStartupEnabled", ex);
                 return false;
             }
             catch (ObjectDisposedException ex) {
-                NativeMethods.LogWarning("KirbyTaskbarBuddyContext.IsStartupEnabled", ex);
+                Diagnostics.LogWarning("KirbyTaskbarBuddyContext.IsStartupEnabled", ex);
                 return false;
             }
         }
@@ -1730,16 +1406,16 @@ namespace KirbyTaskbarBuddy {
                 }
             }
             catch (SecurityException ex) {
-                NativeMethods.LogWarning("KirbyTaskbarBuddyContext.SetStartup", ex);
+                Diagnostics.LogWarning("KirbyTaskbarBuddyContext.SetStartup", ex);
             }
             catch (UnauthorizedAccessException ex) {
-                NativeMethods.LogWarning("KirbyTaskbarBuddyContext.SetStartup", ex);
+                Diagnostics.LogWarning("KirbyTaskbarBuddyContext.SetStartup", ex);
             }
             catch (IOException ex) {
-                NativeMethods.LogWarning("KirbyTaskbarBuddyContext.SetStartup", ex);
+                Diagnostics.LogWarning("KirbyTaskbarBuddyContext.SetStartup", ex);
             }
             catch (ObjectDisposedException ex) {
-                NativeMethods.LogWarning("KirbyTaskbarBuddyContext.SetStartup", ex);
+                Diagnostics.LogWarning("KirbyTaskbarBuddyContext.SetStartup", ex);
             }
         }
 
@@ -1752,16 +1428,8 @@ namespace KirbyTaskbarBuddy {
         private void OnExit(object sender, EventArgs e) {
             _animTimer.Stop();
 
-            if (_overlay != null) {
-                _overlay.Close();
-            }
-
-            if (_enemyOverlay != null) {
-                _enemyOverlay.Close();
-            }
-
-            if (_vfxOverlay != null) {
-                _vfxOverlay.Close();
+            if (_stage != null) {
+                _stage.Dispose();
             }
 
             if (_hookID != IntPtr.Zero) {
@@ -1794,7 +1462,7 @@ namespace KirbyTaskbarBuddy {
                     _instance.NotifyUserActivity();
 
                     if (_downKeys.Add(vkCode) && !_instance._isPaused && !wasSleeping) {
-                        string keyName = NativeMethods.VkCodeToName(vkCode);
+                        string keyName = KeyBindings.VkCodeToName(vkCode);
 
                         if (keyName != null) {
                             _instance.HandleKeySwitch(keyName);

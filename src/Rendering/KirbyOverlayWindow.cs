@@ -6,10 +6,11 @@ using System.Windows.Forms;
 namespace KirbyTaskbarBuddy {
 
     /// <summary>
-    /// Click-through, per-pixel alpha-blended Win32 layered window that renders Kirby on the desktop.
-    /// Uses a single persistent GDI DIBSection buffer to avoid allocating Bitmaps or HBITMAPs on the render loop.
+    /// Click-through, per-pixel alpha-blended Win32 layered window that renders sprites on the desktop.
+    /// Uses a single persistent GDI DIBSection buffer and caches the last rendered tile and screen position
+    /// to avoid redundant pixel blits or Win32 <c>UpdateLayeredWindow</c> calls on the 60 Hz loop.
     /// </summary>
-    public class KirbyOverlayWindow : Form {
+    public class KirbyOverlayWindow : Form, ISpriteLayer {
 
         private IntPtr _memDc = IntPtr.Zero;
         private IntPtr _hDib = IntPtr.Zero;
@@ -17,11 +18,13 @@ namespace KirbyTaskbarBuddy {
         private IntPtr _dibBits = IntPtr.Zero;
         private int _dibSize;
 
-        // Tracks the last sprite tile and scale written into _dibBits so we only
-        // touch pixel memory when the animation frame actually changes (~6-15 Hz),
-        // rather than on every 1-pixel movement tick (60 Hz).
+        // Tracks the last sprite tile, scale, and screen coordinates so we only
+        // touch pixel memory when the animation frame changes (~6-15 Hz) and only call
+        // UpdateLayeredWindow when the tile, scale, or screen position changes.
         private SpriteTile _renderedTile;
         private int _renderedScale;
+        private int _renderedScreenX = int.MinValue;
+        private int _renderedScreenY = int.MinValue;
         private Rectangle _dirtyRect = Rectangle.Empty;
         private bool _isCleared;
 
@@ -79,6 +82,9 @@ namespace KirbyTaskbarBuddy {
             _dibBits = IntPtr.Zero;
             _dibSize = 0;
             _renderedTile = null;
+            _renderedScale = 0;
+            _renderedScreenX = int.MinValue;
+            _renderedScreenY = int.MinValue;
             _dirtyRect = Rectangle.Empty;
             _isCleared = false;
         }
@@ -120,6 +126,25 @@ namespace KirbyTaskbarBuddy {
         }
 
         /// <summary>
+        /// Aligns <paramref name="tile"/> to the bottom of <paramref name="workArea"/> at horizontal center
+        /// <paramref name="worldX"/> and vertical offset <paramref name="worldYOffset"/> (in unscaled 1x pixels),
+        /// or clears the overlay if <paramref name="tile"/> is <c>null</c>.
+        /// </summary>
+        public void RenderAtTaskbar(SpriteTile tile, int scale, Rectangle workArea, double worldX,
+            double worldYOffset = 0.0) {
+            if (tile == null) {
+                ClearOverlay(scale);
+                return;
+            }
+
+            int halfWidth = CanvasConstants.TILE_SIZE / 2 * scale;
+            int screenX = (int)Math.Round(worldX) - halfWidth;
+            int screenY = workArea.Bottom - (CanvasConstants.PIVOT_Y + 1) * scale -
+                          (int)Math.Round(worldYOffset * scale);
+            UpdateSpriteFrame(tile, scale, screenX, screenY);
+        }
+
+        /// <summary>
         /// Updates the layered window's position and (when the animation frame or scale changes)
         /// nearest-neighbor blits the <see cref="SpriteTile"/> into the persistent DIBSection buffer.
         /// </summary>
@@ -128,7 +153,12 @@ namespace KirbyTaskbarBuddy {
                 return;
             }
 
-            int targetSize = NativeMethods.TILE_SIZE * scale;
+            if (!_isCleared && tile == _renderedTile && scale == _renderedScale &&
+                screenX == _renderedScreenX && screenY == _renderedScreenY) {
+                return;
+            }
+
+            int targetSize = CanvasConstants.TILE_SIZE * scale;
             EnsureDib(targetSize);
 
             if (_memDc == IntPtr.Zero || _dibBits == IntPtr.Zero) {
@@ -203,6 +233,8 @@ namespace KirbyTaskbarBuddy {
                 ref blend,
                 NativeMethods.ULW_ALPHA);
 
+            _renderedScreenX = screenX;
+            _renderedScreenY = screenY;
             _isCleared = false;
         }
 
@@ -216,7 +248,7 @@ namespace KirbyTaskbarBuddy {
                 return;
             }
 
-            int targetSize = NativeMethods.TILE_SIZE * scale;
+            int targetSize = CanvasConstants.TILE_SIZE * scale;
             EnsureDib(targetSize);
 
             if (_memDc == IntPtr.Zero || _dibBits == IntPtr.Zero) {
@@ -245,6 +277,8 @@ namespace KirbyTaskbarBuddy {
                 ref blend,
                 NativeMethods.ULW_ALPHA);
 
+            _renderedScreenX = int.MinValue;
+            _renderedScreenY = int.MinValue;
             _isCleared = true;
         }
 

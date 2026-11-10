@@ -31,147 +31,37 @@ namespace KirbyTaskbarBuddy {
     }
 
     /// <summary>
-    /// Controls how <see cref="SpriteLoader"/> aligns extracted spritesheet frames onto the 80x80 logical canvas.
-    /// </summary>
-    public enum PivotMode {
-
-        /// <summary>
-        /// Aligns the lowest non-background pixel row to <c>PIVOT_Y</c> and centers horizontally using
-        /// only the bottom 4 rows so tall hats or raised weapons do not shift the character's body.
-        /// </summary>
-        FeetBottom4Rows,
-
-        /// <summary>
-        /// Aligns the lowest non-background pixel row to <c>PIVOT_Y</c> and restricts the left-edge scan
-        /// to the bottom 2 rows for defensive guard stances.
-        /// </summary>
-        GuardBottom2Rows,
-
-        /// <summary>
-        /// Aligns all frames to Frame 0's bottom edge and scans the top rows on somersault frames (indices 1 and 2).
-        /// </summary>
-        JumpArc,
-
-        /// <summary>
-        /// Composites Mirror Kirby's guarding body, outer reflective sphere rim, and scrolling rainbow gradient.
-        /// </summary>
-        MirrorGuard,
-
-        /// <summary>
-        /// Centers the non-background sprite bounds horizontally and vertically on <c>(PIVOT_X, PIVOT_Y)</c>
-        /// (useful for projectiles or floating/flying characters).
-        /// </summary>
-        Center,
-
-        /// <summary>
-        /// Aligns an explicit pixel coordinate <c>(CustomPivotX, CustomPivotY)</c> within each frame to <c>(PIVOT_X, PIVOT_Y)</c>.
-        /// When <c>CustomPivotY &lt; 0</c>, aligns the bottom row of the source rectangle (<c>Height - 1</c>) to <c>PIVOT_Y</c>.
-        /// </summary>
-        CustomPivot
-
-    }
-
-    /// <summary>
-    /// State of a single black-and-white air particle during Normal Kirby's inhale animation,
-    /// tracked in unscaled 1x pixel offsets (<see cref="Dx"/>, <see cref="Dy"/>) relative to Kirby's open mouth.
-    /// </summary>
-    public struct InhaleParticle {
-
-        public double Dx;
-        public double Dy;
-        public bool BlackOnTop;
-
-    }
-
-    /// <summary>
-    /// Placement of a single particle sprite from <c>misc-effects.png</c> (<see cref="FormDefinitions.SwallowEffectRects"/>)
-    /// relative to Kirby's floor pivot <c>(PIVOT_X, PIVOT_Y)</c> during the ability-swallow animation.
-    /// </summary>
-    public struct SwallowParticleLayer {
-
-        public int SpriteIndex;
-        public int OffsetX;
-        public int OffsetY;
-
-        public SwallowParticleLayer(int spriteIndex, int offsetX, int offsetY) {
-            SpriteIndex = spriteIndex;
-            OffsetX = offsetX;
-            OffsetY = offsetY;
-        }
-
-    }
-
-    /// <summary>
-    /// Self-contained definition and runtime tile storage for a single sprite animation clip
-    /// (such as Walk, Guard, Jump, Stand, Sleep, or future Attack and Enemy/Helper animations).
-    /// </summary>
-    public sealed class AnimClip {
-
-        public Rectangle[] SourceRects;
-        public int[] Sequence;
-        public double Speed;
-        public bool Loop;
-        public PivotMode Pivot;
-        public int CustomPivotX;
-        public int CustomPivotY;
-
-        // Unique extracted tiles corresponding 1:1 with SourceRects:
-        public SpriteTile[] RawFrames;
-
-        // Playback sequence of tiles (expanded via Sequence if specified, reusing RawFrames references):
-        public SpriteTile[] Frames;
-
-        public bool HasFrames(int minCount = 1) {
-            return Frames != null && Frames.Length >= minCount;
-        }
-
-    }
-
-    /// <summary>
-    /// Defines a Kirby copy ability, its trigger key, its source spritesheet filename,
-    /// and its <see cref="AnimClip"/> definitions.
-    /// </summary>
-    public sealed class FormDef {
-
-        public string Name;
-        public string Key;
-        public string FileName;
-
-        public AnimClip Walk;
-        public AnimClip Guard;
-        public AnimClip Jump;
-        public AnimClip Stand;
-        public AnimClip Inhale;
-        public AnimClip Mouthful;
-        public AnimClip Swallow;
-        public AnimClip SwallowAbility;
-        public AnimClip Hit;
-
-    }
-
-    /// <summary>
-    /// Defines an enemy type, its source spritesheet filename, movement speed,
-    /// optional granted copy ability name (<see cref="CopyAbility"/>), and its <see cref="AnimClip"/> definitions.
-    /// </summary>
-    public sealed class EnemyDef {
-
-        public string Name;
-        public string FileName;
-        public double WalkSpeed;
-        public string CopyAbility;
-
-        public AnimClip Walk;
-        public AnimClip Inhaled;
-
-    }
-
-    /// <summary>
-    /// Catalog of spritesheet coordinates, builder helpers, and frame sequences for all 19 copy abilities and sleep animations.
+    /// Catalog of spritesheet coordinates, builder helpers, and frame sequences for all 19 copy abilities, enemies, and sleep animations.
     /// </summary>
     public static class FormDefinitions {
 
         // Standard 6-frame ping-pong walk sequence expanding 4 source walk frames into [0, 1, 2, 3, 2, 1]:
         public static readonly int[] WalkPingPongSeq = new[] { 0, 1, 2, 3, 2, 1 };
+
+        /// <summary>
+        /// Source rectangle in <c>kirby-normal.png</c> cropped into the 24x24 Windows system tray icon.
+        /// </summary>
+        public static readonly Rectangle NormalTrayIconRect = R(32, 125, 24, 24);
+
+        /// <summary>
+        /// Source rectangle in <c>kirby-mirror.png</c> for Mirror Kirby's guarding body pose.
+        /// </summary>
+        public static readonly Rectangle MirrorGuardBodyRect = R(37, 880, 31, 27);
+
+        /// <summary>
+        /// Source rectangle in <c>kirby-mirror.png</c> for the outer reflective guard bubble rim.
+        /// </summary>
+        public static readonly Rectangle MirrorGuardBubbleRect = R(2, 877, 32, 34);
+
+        /// <summary>
+        /// Horizontal pivot coordinate within each <see cref="SleepCoords"/> frame aligned to <see cref="CanvasConstants.PIVOT_X"/>.
+        /// </summary>
+        public const int SLEEP_PIVOT_X = 18;
+
+        /// <summary>
+        /// Vertical pivot coordinate within each <see cref="SleepCoords"/> frame (-1 aligns the bottom edge to <see cref="CanvasConstants.PIVOT_Y"/>).
+        /// </summary>
+        public const int SLEEP_PIVOT_Y = -1;
 
         /// <summary>
         /// Source rectangles in <c>kirby-sleep.png</c> for nodding off, breathing in sleep, and startled wake-up.
@@ -388,80 +278,118 @@ namespace KirbyTaskbarBuddy {
         }
 
         /// <summary>
+        /// Resolves the Normal Kirby <see cref="FormDef"/> (<c>"normal"</c>) from <paramref name="forms"/>,
+        /// or returns <paramref name="fallbackForm"/> if not found.
+        /// </summary>
+        public static FormDef ResolveNormalForm(IList<FormDef> forms, FormDef fallbackForm) {
+            if (forms != null) {
+                for (int i = 0; i < forms.Count; i++) {
+                    FormDef candidate = forms[i];
+
+                    if (candidate != null && candidate.Name == "normal") {
+                        return candidate;
+                    }
+                }
+            }
+
+            return fallbackForm;
+        }
+
+        /// <summary>
+        /// Resolves the <see cref="FormDef"/> Kirby should transform into after swallowing <paramref name="swallowedEnemy"/>.
+        /// Returns the matching ability form if <see cref="EnemyDef.CopyAbility"/> is defined and registered in <paramref name="forms"/>,
+        /// or <paramref name="currentForm"/> if the enemy grants no ability.
+        /// </summary>
+        public static FormDef ResolveSwallowedForm(
+            IList<FormDef> forms,
+            FormDef currentForm,
+            EnemyDef swallowedEnemy) {
+            if (forms == null || swallowedEnemy == null || string.IsNullOrEmpty(swallowedEnemy.CopyAbility)) {
+                return currentForm;
+            }
+
+            for (int i = 0; i < forms.Count; i++) {
+                FormDef candidate = forms[i];
+
+                if (candidate != null && candidate.Name == swallowedEnemy.CopyAbility) {
+                    return candidate;
+                }
+            }
+
+            return currentForm;
+        }
+
+        /// <summary>
         /// Registers all 19 Kirby copy abilities and their spritesheet animation clips.
         /// </summary>
         public static void PopulateForms(List<FormDef> forms, Dictionary<string, FormDef> keyToForm, out FormDef normalForm) {
-            normalForm = null;
-
-            AddForm(forms, keyToForm, ref normalForm, "normal", "0", "kirby-normal.png",
+            normalForm = AddForm(forms, keyToForm, "normal", "0", "kirby-normal.png",
                 WalkClip(Row(125, 24, 24, 32, 60, 87, 114)),
                 GuardClip(Row(263, 26, 25, 79, 108)),
                 JumpClip(R(66, 193, 23, 24), R(94, 193, 23, 23), R(122, 194, 21, 22), R(147, 193, 24, 23),
                     R(176, 193, 23, 24)),
                 StandClip(Row(55, 24, 23, 113, 142)));
 
-            if (normalForm != null) {
-                Rectangle[] swallowRects = new[]
-                {
-                    R(185, 86, 29, 32),
-                    R(219, 90, 32, 28),
-                    R(256, 96, 39, 22),
-                    R(300, 99, 32, 19),
-                    R(337, 102, 23, 16)
-                };
+            Rectangle[] swallowRects = new[]
+            {
+                R(185, 86, 29, 32),
+                R(219, 90, 32, 28),
+                R(256, 96, 39, 22),
+                R(300, 99, 32, 19),
+                R(337, 102, 23, 16)
+            };
 
-                normalForm.Inhale = Clip(new[] { R(22, 94, 21, 24), R(48, 86, 21, 32) }, 0.15, false);
-                normalForm.Mouthful = Clip(new[] { R(111, 87, 32, 31) }, 0.08, false);
-                normalForm.Swallow = Clip(swallowRects, 0.15, false, PivotMode.FeetBottom4Rows, SwallowNoAbilitySeq);
-                normalForm.SwallowAbility = Clip(swallowRects, 1.0, false, PivotMode.FeetBottom4Rows, SwallowAbilitySeq);
-                normalForm.Hit = Clip(new[] { R(97, 432, 24, 24), R(126, 432, 24, 24), R(113, 55, 24, 23) }, 1.0,
-                    false, PivotMode.FeetBottom4Rows, HitSeq);
-            }
+            normalForm.Inhale = Clip(new[] { R(22, 94, 21, 24), R(48, 86, 21, 32) }, 0.15, false);
+            normalForm.Mouthful = Clip(new[] { R(111, 87, 32, 31) }, 0.08, false);
+            normalForm.Swallow = Clip(swallowRects, 0.15, false, PivotMode.FeetBottom4Rows, SwallowNoAbilitySeq);
+            normalForm.SwallowAbility = Clip(swallowRects, 1.0, false, PivotMode.FeetBottom4Rows, SwallowAbilitySeq);
+            normalForm.Hit = Clip(new[] { R(97, 432, 24, 24), R(126, 432, 24, 24), R(113, 55, 24, 23) }, 1.0,
+                false, PivotMode.FeetBottom4Rows, HitSeq);
 
-            AddForm(forms, keyToForm, ref normalForm, "ice", "l", "kirby-ice.png",
+            AddForm(forms, keyToForm, "ice", "l", "kirby-ice.png",
                 WalkClip(Row(213, 24, 34, 6, 35, 63, 92)),
                 GuardClip(Strip(42, 605, 34, 26, 3, 0, 37)),
                 JumpClip(R(6, 372, 24, 33), R(35, 381, 26, 24), R(66, 381, 26, 27), R(97, 372, 25, 32), R(127, 365, 23, 40)),
                 StandClip(Row(84, 24, 32, 35, 64)));
 
-            AddForm(forms, keyToForm, ref normalForm, "bomb", "b", "kirby-bomb.png",
+            AddForm(forms, keyToForm, "bomb", "b", "kirby-bomb.png",
                 WalkClip(R(0, 101, 31, 29), R(32, 101, 32, 29), R(68, 101, 32, 29), R(98, 101, 32, 29)),
                 GuardClip(Row(103, 32, 28, 304, 339)),
                 JumpClip(R(6, 174, 27, 30), R(38, 180, 23, 23), R(66, 180, 21, 27), R(92, 178, 28, 25), R(125, 168, 23, 36)),
                 StandClip(Row(34, 29, 28, 40, 74)));
 
-            AddForm(forms, keyToForm, ref normalForm, "beam", "e", "kirby-beam.png",
+            AddForm(forms, keyToForm, "beam", "e", "kirby-beam.png",
                 WalkClip(Row(101, 27, 37, 5, 35, 65, 96)),
                 GuardClip(Row(348, 31, 27, 5, 39)),
                 JumpClip(R(6, 193, 26, 30), R(37, 199, 27, 24), R(69, 199, 23, 29), R(97, 191, 28, 31), R(130, 184, 24, 39)),
                 StandClip(Row(29, 26, 31, 37, 68)));
 
-            AddForm(forms, keyToForm, ref normalForm, "cutter", "c", "kirby-cutter.png",
+            AddForm(forms, keyToForm, "cutter", "c", "kirby-cutter.png",
                 WalkClip(Row(126, 29, 35, 4, 34, 66, 100)),
                 GuardClip(Row(413, 28, 30, 5, 36)),
                 JumpClip(R(6, 214, 23, 37), R(34, 227, 23, 28), R(62, 227, 23, 33), R(90, 221, 27, 29), R(122, 216, 24, 35)),
                 StandClip(Row(34, 24, 34, 35, 64)));
 
-            AddForm(forms, keyToForm, ref normalForm, "fighter", "f", "kirby-fighter.png",
+            AddForm(forms, keyToForm, "fighter", "f", "kirby-fighter.png",
                 WalkClip(Strip(6, 95, 26, 24, 4, 30)),
                 GuardClip(Row(333, 29, 25, 5, 37)),
                 JumpClip(R(6, 176, 25, 24), R(36, 171, 23, 28), R(64, 175, 21, 23), R(90, 176, 26, 23), R(121, 169, 23, 31)),
                 StandClip(Row(27, 24, 23, 35, 64)));
 
-            AddForm(forms, keyToForm, ref normalForm, "fire", "d", "kirby-fire.png",
+            AddForm(forms, keyToForm, "fire", "d", "kirby-fire.png",
                 WalkClip(Row(309, 24, 34, 6, 35, 63, 92)),
                 GuardClip(Row(941, 28, 31, 5, 36)),
                 JumpClip(R(6, 529, 24, 33), R(35, 538, 26, 24), R(66, 538, 26, 27), R(97, 529, 25, 32), R(127, 522, 23, 40)),
                 StandClip(Row(134, 24, 32, 35, 64)));
 
-            AddForm(forms, keyToForm, ref normalForm, "hammer", "h", "kirby-hammer.png",
+            AddForm(forms, keyToForm, "hammer", "h", "kirby-hammer.png",
                 WalkClip(Strip(5, 164, 44, 49, 4, 47)),
                 GuardClip(Row(426, 29, 34, 5, 37)),
                 JumpClip(R(8, 240, 42, 43), R(82, 258, 31, 42), R(132, 259, 27, 45), R(174, 239, 44, 42),
                     R(236, 234, 37, 47)),
                 StandClip(Row(100, 36, 40, 53, 94)));
 
-            AddForm(forms, keyToForm, ref normalForm, "jet", "j", "kirby-jet.png",
+            AddForm(forms, keyToForm, "jet", "j", "kirby-jet.png",
                 WalkClip(Row(114, 28, 29, 6, 39, 70, 101)),
                 GuardClip(Row(283, 30, 28, 5, 38)),
                 JumpClip(R(6, 195, 26, 29), R(37, 200, 24, 23), R(66, 200, 26, 24), R(97, 197, 27, 26), R(129, 193, 25, 31)),
@@ -469,68 +397,68 @@ namespace KirbyTaskbarBuddy {
 
             // Mirror Kirby's guard uses a 15-frame scrolling rainbow palette animation
             // composited inside a reflective sphere (handled via PivotMode.MirrorGuard in SpriteLoader).
-            AddForm(forms, keyToForm, ref normalForm, "mirror", "m", "kirby-mirror.png",
+            AddForm(forms, keyToForm, "mirror", "m", "kirby-mirror.png",
                 WalkClip(Row(117, 27, 37, 5, 35, 65, 96)),
                 MirrorGuardClip(Strip(220, 877, 32, 34, 15, 35)),
                 JumpClip(R(6, 272, 26, 30), R(37, 278, 27, 24), R(69, 278, 23, 29), R(97, 270, 28, 31), R(130, 263, 24, 39)),
                 StandClip(Row(44, 26, 31, 37, 68)));
 
-            AddForm(forms, keyToForm, ref normalForm, "ninja", "n", "kirby-ninja.png",
+            AddForm(forms, keyToForm, "ninja", "n", "kirby-ninja.png",
                 WalkClip(Row(45, 27, 32, 207, 235, 264, 296)),
                 GuardClip(Row(234, 28, 26, 5, 36)),
                 JumpClip(R(6, 136, 23, 33), R(34, 145, 23, 24), R(62, 145, 21, 31), R(90, 141, 24, 27), R(119, 130, 23, 39)),
                 StandClip(Row(43, 24, 30, 35, 64)));
 
-            AddForm(forms, keyToForm, ref normalForm, "paint", "p", "kirby-paint.png",
+            AddForm(forms, keyToForm, "paint", "p", "kirby-paint.png",
                 WalkClip(Row(113, 26, 28, 5, 34, 62, 92)),
                 GuardClip(Row(196, 26, 25, 181, 210)),
                 JumpClip(R(6, 195, 24, 28), R(35, 198, 23, 24), R(63, 199, 22, 25), R(90, 196, 24, 26), R(119, 195, 23, 28)),
                 StandClip(Row(29, 24, 27, 35, 64)));
 
-            AddForm(forms, keyToForm, ref normalForm, "parasol", "r", "kirby-parasol.png",
+            AddForm(forms, keyToForm, "parasol", "r", "kirby-parasol.png",
                 WalkClip(Strip(269, 92, 42, 49, 4, 45)),
                 GuardClip(Row(116, 29, 25, 669, 701)),
                 JumpClip(R(11, 167, 37, 44), R(77, 186, 30, 41), R(130, 187, 21, 45), R(165, 168, 42, 41),
                     R(229, 162, 30, 47)),
                 StandClip(Row(91, 31, 46, 42, 78)));
 
-            AddForm(forms, keyToForm, ref normalForm, "plasma", "a", "kirby-plasma.png",
+            AddForm(forms, keyToForm, "plasma", "a", "kirby-plasma.png",
                 WalkClip(Row(357, 24, 34, 6, 35, 63, 92)),
                 GuardClip(Row(1078, 28, 29, 5, 36)),
                 JumpClip(R(6, 608, 24, 33), R(35, 617, 26, 24), R(66, 617, 26, 27), R(97, 608, 25, 32), R(127, 601, 23, 40)),
                 StandClip(Row(159, 24, 32, 35, 64)));
 
-            AddForm(forms, keyToForm, ref normalForm, "stone", "s", "kirby-stone.png",
+            AddForm(forms, keyToForm, "stone", "s", "kirby-stone.png",
                 WalkClip(Row(123, 27, 32, 5, 33, 62, 94)),
                 GuardClip(Row(406, 28, 25, 5, 36)),
                 JumpClip(R(6, 214, 23, 33), R(34, 223, 23, 24), R(62, 223, 21, 31), R(90, 219, 24, 27), R(119, 208, 23, 39)),
                 StandClip(Row(29, 24, 30, 35, 64)));
 
-            AddForm(forms, keyToForm, ref normalForm, "suplex", "u", "kirby-suplex.png",
+            AddForm(forms, keyToForm, "suplex", "u", "kirby-suplex.png",
                 WalkClip(Strip(6, 95, 26, 24, 4, 30)),
                 GuardClip(Row(333, 29, 25, 5, 37)),
                 JumpClip(R(6, 176, 25, 24), R(36, 171, 23, 28), R(64, 175, 21, 23), R(90, 176, 26, 23), R(121, 169, 23, 31)),
                 StandClip(Row(27, 24, 23, 35, 64)));
 
-            AddForm(forms, keyToForm, ref normalForm, "sword", "w", "kirby-sword.png",
+            AddForm(forms, keyToForm, "sword", "w", "kirby-sword.png",
                 WalkClip(Row(101, 32, 30, 3, 34, 67, 101)),
                 GuardClip(Row(321, 32, 28, 5, 40)),
                 JumpClip(R(6, 174, 27, 30), R(38, 180, 23, 23), R(66, 180, 21, 27), R(92, 178, 28, 25), R(125, 168, 23, 36)),
                 StandClip(Row(34, 29, 28, 40, 74)));
 
-            AddForm(forms, keyToForm, ref normalForm, "wheel", "v", "kirby-wheel.png",
+            AddForm(forms, keyToForm, "wheel", "v", "kirby-wheel.png",
                 WalkClip(Row(121, 26, 28, 5, 34, 62, 92)),
                 GuardClip(Row(204, 26, 25, 152, 181)),
                 JumpClip(R(6, 203, 24, 28), R(35, 206, 23, 24), R(63, 207, 22, 25), R(90, 204, 24, 26), R(119, 203, 23, 28)),
                 StandClip(Row(37, 24, 27, 35, 64)));
 
-            AddForm(forms, keyToForm, ref normalForm, "wing", "g", "kirby-wing.png",
+            AddForm(forms, keyToForm, "wing", "g", "kirby-wing.png",
                 WalkClip(Row(127, 31, 32, 4, 35, 66, 100)),
                 GuardClip(Row(448, 30, 29, 5, 38)),
                 JumpClip(R(6, 214, 26, 31), R(37, 220, 24, 23), R(66, 222, 25, 30), R(96, 217, 28, 27), R(129, 212, 23, 32)),
                 StandClip(Row(37, 28, 32, 39, 72)));
 
-            AddForm(forms, keyToForm, ref normalForm, "yoyo", "y", "kirby-yoyo.png",
+            AddForm(forms, keyToForm, "yoyo", "y", "kirby-yoyo.png",
                 WalkClip(Row(121, 26, 28, 5, 34, 62, 92)),
                 GuardClip(Row(204, 26, 25, 152, 181)),
                 JumpClip(R(6, 203, 24, 28), R(35, 206, 23, 24), R(63, 207, 22, 25), R(90, 204, 24, 26), R(119, 203, 23, 28)),
@@ -566,10 +494,9 @@ namespace KirbyTaskbarBuddy {
             });
         }
 
-        private static void AddForm(
+        private static FormDef AddForm(
             List<FormDef> forms,
             Dictionary<string, FormDef> keyToForm,
-            ref FormDef normalForm,
             string name,
             string key,
             string file,
@@ -589,10 +516,7 @@ namespace KirbyTaskbarBuddy {
             };
             forms.Add(def);
             keyToForm[key] = def;
-
-            if (name == "normal") {
-                normalForm = def;
-            }
+            return def;
         }
 
     }

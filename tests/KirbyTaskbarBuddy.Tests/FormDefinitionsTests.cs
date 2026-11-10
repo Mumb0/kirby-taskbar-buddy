@@ -171,8 +171,8 @@ namespace KirbyTaskbarBuddy.Tests
                 Assert.True(r.X >= 0 && r.Y >= 0, string.Format("{0}.{1} has negative coordinates: {2}", formName, clipName, r));
                 Assert.True(r.Width > 0 && r.Height > 0, string.Format("{0}.{1} has non-positive size: {2}", formName, clipName, r));
                 Assert.True(
-                    r.Width <= NativeMethods.TILE_SIZE && r.Height <= NativeMethods.TILE_SIZE,
-                    string.Format("{0}.{1} rect {2} exceeds TILE_SIZE ({3})", formName, clipName, r, NativeMethods.TILE_SIZE));
+                    r.Width <= CanvasConstants.TILE_SIZE && r.Height <= CanvasConstants.TILE_SIZE,
+                    string.Format("{0}.{1} rect {2} exceeds TILE_SIZE ({3})", formName, clipName, r, CanvasConstants.TILE_SIZE));
             }
 
             if (clip.Sequence != null)

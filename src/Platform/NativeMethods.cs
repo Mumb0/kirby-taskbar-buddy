@@ -1,31 +1,13 @@
 using System;
-using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text;
 
 namespace KirbyTaskbarBuddy {
 
     /// <summary>
-    /// Centralizes Win32/GDI P/Invoke declarations, window style constants, shared canvas geometry,
-    /// and zero-allocation input/memory helpers.
+    /// Centralizes Win32 and GDI P/Invoke declarations, structs, and window style constants.
     /// </summary>
     internal static class NativeMethods {
-
-        /// <summary>
-        /// Logical unscaled canvas size (80x80 pixels) used to align all sprites.
-        /// </summary>
-        public const int TILE_SIZE = 80;
-
-        /// <summary>
-        /// Horizontal center of Kirby's feet within the 80x80 logical tile.
-        /// </summary>
-        public const int PIVOT_X = 40;
-
-        /// <summary>
-        /// Vertical floor line (Y=54) where Kirby's feet rest within the 80x80 logical tile.
-        /// Leaves 54px above for tall hats/weapons (Parasol, Hammer) and 25px below for Mirror's guard bubble.
-        /// </summary>
-        public const int PIVOT_Y = 54;
 
         // Extended Window Styles for a click-through, non-activating, topmost desktop overlay:
         // - WS_EX_LAYERED:     Enables per-pixel alpha blending via UpdateLayeredWindow.
@@ -218,75 +200,6 @@ namespace KirbyTaskbarBuddy {
         [DllImport("kernel32.dll", SetLastError = true)]
         public static extern bool SetProcessWorkingSetSize(IntPtr hProcess, IntPtr dwMinimumWorkingSetSize,
             IntPtr dwMaximumWorkingSetSize);
-
-        /// <summary>
-        /// Writes a non-fatal diagnostic warning to registered trace/debug listeners (e.g., Visual Studio, Rider, DebugView)
-        /// without allocating UI dialogs or performing disk I/O.
-        /// </summary>
-        public static void LogWarning(string context, Exception ex) {
-            if (ex == null) {
-                return;
-            }
-
-            Trace.TraceWarning("[KirbyTaskbarBuddy] {0}: {1}: {2}", context, ex.GetType().Name, ex.Message);
-        }
-
-        /// <summary>
-        /// Forces garbage collection and instructs Windows to trim unused pages (such as temporary
-        /// startup PNG decode buffers) from the process working set.
-        /// </summary>
-        public static void TrimMemory() {
-            try {
-                GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, true);
-                GC.WaitForPendingFinalizers();
-                GC.Collect(GC.MaxGeneration, GCCollectionMode.Forced, true);
-
-                using (Process currentProcess = Process.GetCurrentProcess()) {
-                    SetProcessWorkingSetSize(currentProcess.Handle, new IntPtr(-1), new IntPtr(-1));
-                }
-            }
-            catch (InvalidOperationException ex) {
-                LogWarning("NativeMethods.TrimMemory", ex);
-            }
-            catch (ExternalException ex) {
-                LogWarning("NativeMethods.TrimMemory", ex);
-            }
-            catch (NotSupportedException ex) {
-                LogWarning("NativeMethods.TrimMemory", ex);
-            }
-        }
-
-        /// <summary>
-        /// Maps a Win32 Virtual-Key code to a Kirby ability key string using pre-interned literals.
-        /// Returns null for unmapped keys so fast typing allocates zero strings in the keyboard hook.
-        /// </summary>
-        public static string VkCodeToName(int vk) {
-            switch (vk) {
-                case 0x30:
-                case 0x60: return "0"; // Top-row 0 or Numpad 0 -> Normal Kirby
-                case 0x41: return "a";
-                case 0x42: return "b";
-                case 0x43: return "c";
-                case 0x44: return "d";
-                case 0x45: return "e";
-                case 0x46: return "f";
-                case 0x47: return "g";
-                case 0x48: return "h";
-                case 0x4A: return "j";
-                case 0x4C: return "l";
-                case 0x4D: return "m";
-                case 0x4E: return "n";
-                case 0x50: return "p";
-                case 0x52: return "r";
-                case 0x53: return "s";
-                case 0x55: return "u";
-                case 0x56: return "v";
-                case 0x57: return "w";
-                case 0x59: return "y";
-                case 0x20: return " "; // Spacebar -> Jump
-                default: return null;
-            }
-        }
 
     }
 

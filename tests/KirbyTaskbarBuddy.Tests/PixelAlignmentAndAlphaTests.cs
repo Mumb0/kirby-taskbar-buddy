@@ -150,8 +150,8 @@ namespace KirbyTaskbarBuddy.Tests
                         foreach (SpriteTile tile in form.Guard.RawFrames)
                         {
                             int bottomY = tile.MinY + tile.Height - 1;
-                            Assert.True(bottomY > NativeMethods.PIVOT_Y, "Mirror guard sphere should extend below PIVOT_Y");
-                            Assert.True(tile.MinX < NativeMethods.PIVOT_X && (tile.MinX + tile.Width - 1) > NativeMethods.PIVOT_X);
+                            Assert.True(bottomY > CanvasConstants.PIVOT_Y, "Mirror guard sphere should extend below PIVOT_Y");
+                            Assert.True(tile.MinX < CanvasConstants.PIVOT_X && (tile.MinX + tile.Width - 1) > CanvasConstants.PIVOT_X);
                         }
                     }
                     else
@@ -173,8 +173,8 @@ namespace KirbyTaskbarBuddy.Tests
                 {
                     SpriteTile sleepTile = sleepFrames[i];
                     int bottomY = sleepTile.MinY + sleepTile.Height - 1;
-                    Assert.Equal(NativeMethods.PIVOT_Y, bottomY);
-                    Assert.True(sleepTile.MinX < NativeMethods.PIVOT_X && (sleepTile.MinX + sleepTile.Width - 1) > NativeMethods.PIVOT_X);
+                    Assert.Equal(CanvasConstants.PIVOT_Y, bottomY);
+                    Assert.True(sleepTile.MinX < CanvasConstants.PIVOT_X && (sleepTile.MinX + sleepTile.Width - 1) > CanvasConstants.PIVOT_X);
                 }
             }
             finally
@@ -203,7 +203,7 @@ namespace KirbyTaskbarBuddy.Tests
 
                 using (FastSheet sheet = new FastSheet(null, bmp, 32, 32))
                 {
-                    int[] scratch = new int[NativeMethods.TILE_SIZE * NativeMethods.TILE_SIZE];
+                    int[] scratch = new int[CanvasConstants.TILE_SIZE * CanvasConstants.TILE_SIZE];
                     AnimClip clip = FormDefinitions.Clip(
                         new Rectangle[] { new Rectangle(0, 0, 32, 32) },
                         0.1,
@@ -214,7 +214,7 @@ namespace KirbyTaskbarBuddy.Tests
 
                     SpriteTile tile = clip.Frames[0];
                     // Feet at Y=20 must land on PIVOT_Y (54), so top of hat (Y=5) lands at 54 - (20 - 5) = 39.
-                    Assert.Equal(NativeMethods.PIVOT_Y, tile.MinY + tile.Height - 1);
+                    Assert.Equal(CanvasConstants.PIVOT_Y, tile.MinY + tile.Height - 1);
                     Assert.Equal(39, tile.MinY);
 
                     // Feet center (X=6) must land on PIVOT_X (40), so hat left edge (X=2) lands at 40 - (6 - 2) = 36.
@@ -240,7 +240,7 @@ namespace KirbyTaskbarBuddy.Tests
 
                 using (FastSheet sheet = new FastSheet(null, bmp, 20, 20))
                 {
-                    int[] scratch = new int[NativeMethods.TILE_SIZE * NativeMethods.TILE_SIZE];
+                    int[] scratch = new int[CanvasConstants.TILE_SIZE * CanvasConstants.TILE_SIZE];
 
                     // 1. PivotMode.Center places bounding-box center (4, 6) at (PIVOT_X=40, PIVOT_Y=54) -> MinX=38, MinY=52.
                     AnimClip centerClip = FormDefinitions.Clip(
@@ -249,8 +249,8 @@ namespace KirbyTaskbarBuddy.Tests
                         false,
                         PivotMode.Center);
                     SpriteLoader.LoadClip(sheet, centerClip, scratch);
-                    Assert.Equal(NativeMethods.PIVOT_X - 2, centerClip.Frames[0].MinX);
-                    Assert.Equal(NativeMethods.PIVOT_Y - 2, centerClip.Frames[0].MinY);
+                    Assert.Equal(CanvasConstants.PIVOT_X - 2, centerClip.Frames[0].MinX);
+                    Assert.Equal(CanvasConstants.PIVOT_Y - 2, centerClip.Frames[0].MinY);
                     Assert.Equal(5, centerClip.Frames[0].Width);
                     Assert.Equal(5, centerClip.Frames[0].Height);
 
@@ -264,8 +264,8 @@ namespace KirbyTaskbarBuddy.Tests
                         customPivotX: 2,
                         customPivotY: 4);
                     SpriteLoader.LoadClip(sheet, customClip, scratch);
-                    Assert.Equal(NativeMethods.PIVOT_X, customClip.Frames[0].MinX);
-                    Assert.Equal(NativeMethods.PIVOT_Y, customClip.Frames[0].MinY);
+                    Assert.Equal(CanvasConstants.PIVOT_X, customClip.Frames[0].MinX);
+                    Assert.Equal(CanvasConstants.PIVOT_Y, customClip.Frames[0].MinY);
                 }
             }
         }
@@ -279,14 +279,14 @@ namespace KirbyTaskbarBuddy.Tests
             Assert.True(SpriteLoader.IsTransparent(0x00FFFFFF));
             Assert.False(SpriteLoader.IsTransparent(unchecked((int)0xFFFF80A0)));
 
-            Assert.True(SpriteLoader.IsRawSheetBgColor(0x00FFFFFF, bg0, bgCorner)); // Alpha = 0
-            Assert.True(SpriteLoader.IsRawSheetBgColor(bg0, bg0, bgCorner));        // Sheet top-left color
-            Assert.True(SpriteLoader.IsRawSheetBgColor(bgCorner, bg0, bgCorner));   // Sub-rect corner color
-            Assert.True(SpriteLoader.IsRawSheetBgColor(unchecked((int)0xFF8080FF), bg0, bgCorner)); // Outer sheet periwinkle
-            Assert.True(SpriteLoader.IsRawSheetBgColor(unchecked((int)0xFF709AD1), bg0, bgCorner)); // Blue divider grid
-            Assert.True(SpriteLoader.IsRawSheetBgColor(unchecked((int)0xFF9696FF), bg0, bgCorner)); // Lavender fill
-            Assert.True(SpriteLoader.IsRawSheetBgColor(unchecked((int)0xFF004080), bg0, bgCorner)); // Dark navy box fill
-            Assert.False(SpriteLoader.IsRawSheetBgColor(unchecked((int)0xFFFF80A0), bg0, bgCorner)); // Kirby pink
+            Assert.True(SpritesheetCleaner.IsRawSheetBgColor(0x00FFFFFF, bg0, bgCorner)); // Alpha = 0
+            Assert.True(SpritesheetCleaner.IsRawSheetBgColor(bg0, bg0, bgCorner));        // Sheet top-left color
+            Assert.True(SpritesheetCleaner.IsRawSheetBgColor(bgCorner, bg0, bgCorner));   // Sub-rect corner color
+            Assert.True(SpritesheetCleaner.IsRawSheetBgColor(unchecked((int)0xFF8080FF), bg0, bgCorner)); // Outer sheet periwinkle
+            Assert.True(SpritesheetCleaner.IsRawSheetBgColor(unchecked((int)0xFF709AD1), bg0, bgCorner)); // Blue divider grid
+            Assert.True(SpritesheetCleaner.IsRawSheetBgColor(unchecked((int)0xFF9696FF), bg0, bgCorner)); // Lavender fill
+            Assert.True(SpritesheetCleaner.IsRawSheetBgColor(unchecked((int)0xFF004080), bg0, bgCorner)); // Dark navy box fill
+            Assert.False(SpritesheetCleaner.IsRawSheetBgColor(unchecked((int)0xFFFF80A0), bg0, bgCorner)); // Kirby pink
         }
 
         [Fact]
@@ -311,7 +311,7 @@ namespace KirbyTaskbarBuddy.Tests
                 }
 
                 // First pass strips the background and grid colors and returns true.
-                Assert.True(SpriteLoader.StripSingleSpritesheet(tempFile));
+                Assert.True(SpritesheetCleaner.StripSingleSpritesheet(tempFile));
 
                 using (Bitmap cleaned = new Bitmap(tempFile))
                 {
@@ -326,7 +326,7 @@ namespace KirbyTaskbarBuddy.Tests
                 }
 
                 // Second pass on an already-cleaned sheet is a no-op and returns false.
-                Assert.False(SpriteLoader.StripSingleSpritesheet(tempFile));
+                Assert.False(SpritesheetCleaner.StripSingleSpritesheet(tempFile));
             }
             finally
             {
@@ -337,7 +337,7 @@ namespace KirbyTaskbarBuddy.Tests
         [Fact]
         public void BuildSpriteTile_CropsTightNonZeroBoundingBox_AndHandlesEmptyCanvas()
         {
-            int[] scratch = new int[NativeMethods.TILE_SIZE * NativeMethods.TILE_SIZE];
+            int[] scratch = new int[CanvasConstants.TILE_SIZE * CanvasConstants.TILE_SIZE];
 
             // Empty canvas returns a safe 1x1 transparent tile.
             SpriteTile emptyTile = SpriteLoader.BuildSpriteTile(scratch);
@@ -347,8 +347,8 @@ namespace KirbyTaskbarBuddy.Tests
 
             // Two opaque pixels at (10, 15) and (12, 18) -> 3x4 bounding box starting at (10, 15).
             int color = unchecked((int)0xFFFF00FF);
-            scratch[15 * NativeMethods.TILE_SIZE + 10] = color;
-            scratch[18 * NativeMethods.TILE_SIZE + 12] = color;
+            scratch[15 * CanvasConstants.TILE_SIZE + 10] = color;
+            scratch[18 * CanvasConstants.TILE_SIZE + 12] = color;
 
             SpriteTile cropped = SpriteLoader.BuildSpriteTile(scratch);
             Assert.Equal(10, cropped.MinX);
@@ -367,12 +367,12 @@ namespace KirbyTaskbarBuddy.Tests
                 SpriteTile tile = tiles[i];
                 int bottomY = tile.MinY + tile.Height - 1;
                 Assert.True(
-                    bottomY == NativeMethods.PIVOT_Y,
-                    string.Format("{0}.{1}[{2}] bottomY expected {3}, got {4}", formName, clipName, i, NativeMethods.PIVOT_Y, bottomY));
+                    bottomY == CanvasConstants.PIVOT_Y,
+                    string.Format("{0}.{1}[{2}] bottomY expected {3}, got {4}", formName, clipName, i, CanvasConstants.PIVOT_Y, bottomY));
                 Assert.True(
-                    tile.MinX <= NativeMethods.PIVOT_X && (tile.MinX + tile.Width - 1) >= NativeMethods.PIVOT_X,
+                    tile.MinX <= CanvasConstants.PIVOT_X && (tile.MinX + tile.Width - 1) >= CanvasConstants.PIVOT_X,
                     string.Format("{0}.{1}[{2}] horizontal span [{3}..{4}] does not cover PIVOT_X ({5})",
-                        formName, clipName, i, tile.MinX, tile.MinX + tile.Width - 1, NativeMethods.PIVOT_X));
+                        formName, clipName, i, tile.MinX, tile.MinX + tile.Width - 1, CanvasConstants.PIVOT_X));
             }
         }
 

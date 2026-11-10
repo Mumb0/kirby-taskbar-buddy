@@ -55,13 +55,22 @@ namespace KirbyTaskbarBuddy.Tests
                             AssertRectsWithinBitmap(form.Name, "Hit", form.Hit.SourceRects, bmp);
                         }
 
+                        if (form.Name == "normal")
+                        {
+                            AssertRectsWithinBitmap(
+                                form.Name,
+                                "NormalTrayIconRect",
+                                new Rectangle[] { FormDefinitions.NormalTrayIconRect },
+                                bmp);
+                        }
+
                         if (form.Guard.Pivot == PivotMode.MirrorGuard)
                         {
-                            // Mirror Guard also composites Kirby's body (37, 880, 31, 27) and bubble rim (2, 877, 32, 34).
+                            // Mirror Guard also composites Kirby's body and bubble rim.
                             AssertRectsWithinBitmap(
                                 form.Name,
                                 "MirrorGuardSpecial",
-                                new Rectangle[] { new Rectangle(37, 880, 31, 27), new Rectangle(2, 877, 32, 34) },
+                                new Rectangle[] { FormDefinitions.MirrorGuardBodyRect, FormDefinitions.MirrorGuardBubbleRect },
                                 bmp);
                         }
                     }
@@ -123,7 +132,7 @@ namespace KirbyTaskbarBuddy.Tests
                 {
                     Assert.True(
                         bmp.GetPixel(0, 0).A == 0,
-                        string.Format("{0} top-left pixel (0,0) is not transparent; run clean-sprites.bat or SpriteLoader.StripSpritesheetBackgrounds", form.FileName));
+                        string.Format("{0} top-left pixel (0,0) is not transparent; run clean-sprites.bat or SpritesheetCleaner.StripSpritesheetBackgrounds", form.FileName));
                 }
             }
 
@@ -134,7 +143,7 @@ namespace KirbyTaskbarBuddy.Tests
                 {
                     Assert.True(
                         bmp.GetPixel(0, 0).A == 0,
-                        string.Format("{0} top-left pixel (0,0) is not transparent; run clean-sprites.bat or SpriteLoader.StripSpritesheetBackgrounds", enemy.FileName));
+                        string.Format("{0} top-left pixel (0,0) is not transparent; run clean-sprites.bat or SpritesheetCleaner.StripSpritesheetBackgrounds", enemy.FileName));
                 }
             }
 
@@ -358,10 +367,10 @@ namespace KirbyTaskbarBuddy.Tests
             Assert.NotNull(tile);
             // BuildSpriteTile returns a 1x1 zero-pixel tile if all pixels were stripped as background.
             Assert.True(tile.Width > 1 && tile.Height > 1, label + " produced a degenerate/empty SpriteTile");
-            Assert.InRange(tile.MinX, 0, NativeMethods.TILE_SIZE - 1);
-            Assert.InRange(tile.MinY, 0, NativeMethods.TILE_SIZE - 1);
-            Assert.InRange(tile.MinX + tile.Width, 1, NativeMethods.TILE_SIZE);
-            Assert.InRange(tile.MinY + tile.Height, 1, NativeMethods.TILE_SIZE);
+            Assert.InRange(tile.MinX, 0, CanvasConstants.TILE_SIZE - 1);
+            Assert.InRange(tile.MinY, 0, CanvasConstants.TILE_SIZE - 1);
+            Assert.InRange(tile.MinX + tile.Width, 1, CanvasConstants.TILE_SIZE);
+            Assert.InRange(tile.MinY + tile.Height, 1, CanvasConstants.TILE_SIZE);
             Assert.NotNull(tile.PremulPixels);
             Assert.Equal(tile.Width * tile.Height, tile.PremulPixels.Length);
 

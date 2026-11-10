@@ -2,7 +2,7 @@
 
 <p align="center">
   <strong>A lightweight, portable desktop companion that strolls along your Windows taskbar.</strong><br>
-  <em>Reacts to your typing with copy abilities, dodges your cursor, leaps when you press space, and naps when you're away.</em>
+  <em>Reacts to your typing with copy abilities, inhales wandering enemies, dodges your cursor, leaps when you press space, and naps when you're away.</em>
 </p>
 
 <p align="center">
@@ -18,7 +18,7 @@
 Kirby Taskbar Buddy is a desktop companion application built for Windows. Kirby hangs out right
 above your taskbar on your primary monitor, keeping you company as you work, study, or game.
 
-- **Transparent and Click-Through:** Built using a hardware-accelerated layered overlay (
+- **Transparent and Click-Through:** Built using hardware-accelerated layered overlays (
   `WS_EX_TRANSPARENT`). Kirby never steals window focus, interrupts your typing, or blocks taskbar
   clicks.
 - **Fullscreen Auto-Hide:** Automatically hides whenever you play games, watch fullscreen media, or
@@ -38,15 +38,29 @@ As you type in any application (web browser, text editor, terminal, or chat), Ki
 matching keys by dynamically transforming into one of **19 classic copy abilities**. Pressing the
 same ability key again returns him to Normal Kirby.
 
+### Taskbar Combat & Inhale
+
+When **Combat** is enabled, classic enemies (**Waddle Dee** and **Waddle Doo**) periodically spawn on
+the right side of your screen and stroll across the taskbar:
+
+- **Inhale & Copy Abilities:** When in **Normal** form, Kirby automatically inhales approaching
+  enemies with wind particle effects, holds them in a mouthful, and swallows them. Swallowing an
+  ability-granting enemy like **Waddle Doo** plays the classic ability-acquisition star animation and
+  transforms Kirby into **Beam Kirby**!
+- **Enemy Collisions & Knockback:** If Kirby walks into an enemy while holding a copy ability (and
+  not guarding or jumping over it), both Kirby and the enemy recoil backward from the impact and
+  Kirby loses his copy ability back to Normal form.
+
 ### Spacebar Jump
 
 Tapping <kbd>Space</kbd> anywhere on your system launches Kirby into the air with authentic gravity
-and somersault physics.
+and somersault physics, allowing you to leap over approaching enemies.
 
 ### Cursor Danger Guard
 
 Move your mouse cursor close to Kirby while he is on the taskbar, and he will immediately raise a
-defensive shield. Mirror Kirby even summons a shimmering hexagonal barrier.
+defensive shield (blocking enemy contact damage). Mirror Kirby even summons a shimmering hexagonal
+barrier.
 
 ### Idle Sleep Mode
 
@@ -86,6 +100,7 @@ Press any of the following keys anywhere on your system to transform Kirby:
 Right-click the Kirby icon in your Windows system tray (near the clock) to access settings:
 
 - **Show Foreground Taskbar Kirby:** Toggle Kirby's visibility on or off.
+- **Combat:** Toggle enemy spawning, inhaling, and collision interactions on or off.
 - **Kirby Size:** Switch between **1x (Small)**, **2x (Default)**, **3x (Large)**, and **4x (Extra Large)**
   pixel-perfect scaling.
 - **Sleep Timer:** Choose how long Kirby waits before falling asleep (**10 Seconds**, **30 Seconds**,
@@ -128,6 +143,7 @@ The `build.bat` script automatically bundles all sprite resources into `KirbyTas
 
 - Kirby and related character designs are trademarks of Nintendo and HAL Laboratory, Inc.
 - This is an unofficial, non-commercial fan-made desktop project.
+- Built and architected with the assistance of **Google Antigravity** powered by **Gemini**.
 
 <p align="center">
 <img src="assets/kirby-sleep.png" align="center" width="64" height="64" alt="Sleep">

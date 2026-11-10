@@ -343,6 +343,114 @@ namespace KirbyTaskbarBuddy.Tests
         }
 
         [Fact]
+        public void TryTriggerEnemyHit_And_AdvanceHitState_StripsCopyAbilityDespawnsEnemyAndPlaysTwoSixFramePoses()
+        {
+            SpriteTile[] rawHitTiles = CreateDummyTiles(3);
+            SpriteTile[] hitFrames = new SpriteTile[FormDefinitions.HitSeq.Length];
+            for (int i = 0; i < hitFrames.Length; i++)
+            {
+                hitFrames[i] = rawHitTiles[FormDefinitions.HitSeq[i]];
+            }
+
+            FormDef normalForm = new FormDef
+            {
+                Name = "normal",
+                Key = "0",
+                Hit = new AnimClip
+                {
+                    Speed = 1.0,
+                    Loop = false,
+                    Sequence = FormDefinitions.HitSeq,
+                    RawFrames = rawHitTiles,
+                    Frames = hitFrames
+                }
+            };
+            FormDef swordForm = new FormDef
+            {
+                Name = "sword",
+                Key = "w"
+            };
+            FormDef[] forms = new FormDef[] { normalForm, swordForm };
+            EnemyDef enemy = new EnemyDef { Name = "waddle-dee" };
+
+            FormDef currentForm = swordForm;
+            bool isHit = false;
+            double hitAnimTime = 0.0;
+            EnemyDef activeEnemy = enemy;
+            int scale = 2;
+            double kirbyX = 200.0;
+            double contactThreshold = KirbyTaskbarBuddyContext.ENEMY_CONTACT_DISTANCE * scale;
+
+            // Outside contact distance, jumping, sleeping, or inhaling does not trigger enemy hit:
+            Assert.False(KirbyTaskbarBuddyContext.TryTriggerEnemyHit(
+                forms, ref currentForm, SleepState.Awake, false, SwallowState.None,
+                ref isHit, ref hitAnimTime, ref activeEnemy, kirbyX, kirbyX + contactThreshold + 1.0, scale));
+            Assert.False(KirbyTaskbarBuddyContext.CanTakeEnemyHit(
+                SleepState.Awake, true, SwallowState.None, false, enemy, kirbyX, kirbyX, scale));
+            Assert.False(KirbyTaskbarBuddyContext.CanTakeEnemyHit(
+                SleepState.Sleeping, false, SwallowState.None, false, enemy, kirbyX, kirbyX, scale));
+            Assert.False(KirbyTaskbarBuddyContext.CanTakeEnemyHit(
+                SleepState.Awake, false, SwallowState.Inhaling, false, enemy, kirbyX, kirbyX, scale));
+
+            // Walking into the enemy within contact distance immediately strips Sword ability back to Normal,
+            // despawns the enemy, and starts the hit animation:
+            Assert.True(KirbyTaskbarBuddyContext.TryTriggerEnemyHit(
+                forms, ref currentForm, SleepState.Awake, false, SwallowState.None,
+                ref isHit, ref hitAnimTime, ref activeEnemy, kirbyX, kirbyX + contactThreshold, scale));
+            Assert.Same(normalForm, currentForm);
+            Assert.True(isHit);
+            Assert.Equal(0.0, hitAnimTime);
+            Assert.Null(activeEnemy);
+
+            // First 8 ticks of frame 0 apply backward recoil to kirbyX:
+            double startX = kirbyX;
+            for (int tick = 0; tick < 8; tick++)
+            {
+                double prevX = kirbyX;
+                SpriteTile frame = KirbyTaskbarBuddyContext.AdvanceHitState(ref isHit, ref hitAnimTime, ref kirbyX, 1.0, currentForm, scale);
+                Assert.True(isHit);
+                Assert.Same(rawHitTiles[0], frame);
+                Assert.Equal(prevX - KirbyTaskbarBuddyContext.HIT_PUSHBACK_SPEED * scale, kirbyX, 5);
+            }
+            double pushedBackX = startX - 8 * KirbyTaskbarBuddyContext.HIT_PUSHBACK_SPEED * scale;
+            Assert.Equal(pushedBackX, kirbyX, 5);
+
+            // Next 8 ticks hold frame 0 without further recoil (16 frames total of frame 0):
+            for (int tick = 0; tick < 8; tick++)
+            {
+                SpriteTile frame = KirbyTaskbarBuddyContext.AdvanceHitState(ref isHit, ref hitAnimTime, ref kirbyX, 1.0, currentForm, scale);
+                Assert.True(isHit);
+                Assert.Same(rawHitTiles[0], frame);
+                Assert.Equal(pushedBackX, kirbyX, 5);
+            }
+
+            // Next 9 ticks hold frame 1 without recoil:
+            for (int tick = 0; tick < 9; tick++)
+            {
+                SpriteTile frame = KirbyTaskbarBuddyContext.AdvanceHitState(ref isHit, ref hitAnimTime, ref kirbyX, 1.0, currentForm, scale);
+                Assert.True(isHit);
+                Assert.Same(rawHitTiles[1], frame);
+                Assert.Equal(pushedBackX, kirbyX, 5);
+            }
+
+            // Next 9 ticks hold standing frame (frame 2) before resuming walking:
+            for (int tick = 0; tick < 9; tick++)
+            {
+                SpriteTile frame = KirbyTaskbarBuddyContext.AdvanceHitState(ref isHit, ref hitAnimTime, ref kirbyX, 1.0, currentForm, scale);
+                Assert.True(isHit);
+                Assert.Same(rawHitTiles[2], frame);
+                Assert.Equal(pushedBackX, kirbyX, 5);
+            }
+
+            // On tick 34, hit animation finishes and returns null:
+            SpriteTile doneFrame = KirbyTaskbarBuddyContext.AdvanceHitState(ref isHit, ref hitAnimTime, ref kirbyX, 1.0, currentForm, scale);
+            Assert.False(isHit);
+            Assert.Equal(0.0, hitAnimTime);
+            Assert.Equal(pushedBackX, kirbyX, 5);
+            Assert.Null(doneFrame);
+        }
+
+        [Fact]
         public void AdvanceSwallowState_ProgressesFromMouthfulToSwallowingToNone()
         {
             SpriteTile[] mouthfulTiles = CreateDummyTiles(1);

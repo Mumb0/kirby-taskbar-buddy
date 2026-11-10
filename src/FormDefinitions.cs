@@ -145,6 +145,7 @@ namespace KirbyTaskbarBuddy {
         public AnimClip Mouthful;
         public AnimClip Swallow;
         public AnimClip SwallowAbility;
+        public AnimClip Hit;
 
     }
 
@@ -207,6 +208,16 @@ namespace KirbyTaskbarBuddy {
         {
             0, 0, 0, 1, 1, 0, 0, 0, 0, 1, 2, 2, 1, 1, 2, 3, 2, 2, 1, 3, 3,
             4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4
+        };
+
+        // 0-based frame index sequence for Kirby getting hit by an enemy
+        // (16 frames of frame 0: 8 frames pushback + 8 frames hold, 9 frames of frame 1, and 9 frames of standing):
+        public static readonly int[] HitSeq = new[]
+        {
+            0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0,
+            1, 1, 1, 1, 1, 1, 1, 1, 1,
+            2, 2, 2, 2, 2, 2, 2, 2, 2
         };
 
         /// <summary>
@@ -403,6 +414,8 @@ namespace KirbyTaskbarBuddy {
                 normalForm.Mouthful = Clip(new[] { R(111, 87, 32, 31) }, 0.08, false);
                 normalForm.Swallow = Clip(swallowRects, 0.15, false, PivotMode.FeetBottom4Rows, SwallowNoAbilitySeq);
                 normalForm.SwallowAbility = Clip(swallowRects, 1.0, false, PivotMode.FeetBottom4Rows, SwallowAbilitySeq);
+                normalForm.Hit = Clip(new[] { R(97, 432, 24, 24), R(126, 432, 24, 24), R(113, 55, 24, 23) }, 1.0,
+                    false, PivotMode.FeetBottom4Rows, HitSeq);
             }
 
             AddForm(forms, keyToForm, ref normalForm, "ice", "l", "kirby-ice.png",

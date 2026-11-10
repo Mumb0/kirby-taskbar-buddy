@@ -36,6 +36,9 @@ namespace KirbyTaskbarBuddy {
         internal const double INHALE_RANGE = 80.0;
         internal const double INHALE_PULL_SPEED = 2.0;
         internal const double INHALE_TOUCH_DISTANCE = 8.0;
+        internal const double ENEMY_CONTACT_DISTANCE = 16.0;
+        internal const int HIT_PUSHBACK_FRAMES = 8;
+        internal const double HIT_PUSHBACK_SPEED = 1.5;
         internal const double INHALE_VFX_OFFSET_X = 36.0;
         internal const double INHALE_VFX_OFFSET_Y = 0.0;
         internal const int INHALE_PARTICLE_COUNT = 4;
@@ -102,6 +105,8 @@ namespace KirbyTaskbarBuddy {
         private SwallowState _swallowState = SwallowState.None;
         private double _swallowAnimTime;
         private EnemyDef _swallowedEnemy;
+        private bool _isHit;
+        private double _hitAnimTime;
 
         private readonly KirbyOverlayWindow _vfxOverlay;
         private readonly InhaleParticle[] _inhaleParticles = new InhaleParticle[INHALE_PARTICLE_COUNT];
@@ -966,6 +971,125 @@ namespace KirbyTaskbarBuddy {
         }
 
         /// <summary>
+        /// Resolves the Normal Kirby <see cref="FormDef"/> (<c>"normal"</c>) from <paramref name="forms"/>,
+        /// or returns <paramref name="fallbackForm"/> if not found.
+        /// </summary>
+        internal static FormDef ResolveNormalForm(IList<FormDef> forms, FormDef fallbackForm) {
+            if (forms != null) {
+                for (int i = 0; i < forms.Count; i++) {
+                    FormDef candidate = forms[i];
+
+                    if (candidate != null && candidate.Name == "normal") {
+                        return candidate;
+                    }
+                }
+            }
+
+            return fallbackForm;
+        }
+
+        /// <summary>
+        /// Checks whether Kirby is in contact with an active enemy and should take damage:
+        /// Kirby must be awake, on the ground, not currently inhaling/swallowing or already hit,
+        /// and within <see cref="ENEMY_CONTACT_DISTANCE"/> of the enemy.
+        /// </summary>
+        internal static bool CanTakeEnemyHit(
+            SleepState sleepState,
+            bool isJumping,
+            SwallowState swallowState,
+            bool isHit,
+            EnemyDef activeEnemy,
+            double kirbyX,
+            double enemyX,
+            int scale) {
+            if (sleepState != SleepState.Awake || isJumping || swallowState != SwallowState.None || isHit ||
+                activeEnemy == null) {
+                return false;
+            }
+
+            return Math.Abs(enemyX - kirbyX) <= ENEMY_CONTACT_DISTANCE * scale;
+        }
+
+        /// <summary>
+        /// Checks whether Kirby has walked into <paramref name="activeEnemy"/> and, on contact, immediately
+        /// strips any copy ability back to Normal form, despawns the enemy, and starts the hit animation.
+        /// </summary>
+        internal static bool TryTriggerEnemyHit(
+            IList<FormDef> forms,
+            ref FormDef currentForm,
+            SleepState sleepState,
+            bool isJumping,
+            SwallowState swallowState,
+            ref bool isHit,
+            ref double hitAnimTime,
+            ref EnemyDef activeEnemy,
+            double kirbyX,
+            double enemyX,
+            int scale) {
+            if (!CanTakeEnemyHit(sleepState, isJumping, swallowState, isHit, activeEnemy, kirbyX, enemyX, scale)) {
+                return false;
+            }
+
+            currentForm = ResolveNormalForm(forms, currentForm);
+            isHit = true;
+            hitAnimTime = 0.0;
+            activeEnemy = null;
+            return true;
+        }
+
+        /// <summary>
+        /// Advances Normal Kirby's 2-frame enemy-hit animation (<see cref="FormDef.Hit"/>) by <paramref name="delta60"/> ticks,
+        /// applying backward recoil to <paramref name="kirbyX"/> during the first <see cref="HIT_PUSHBACK_FRAMES"/> frames,
+        /// and returns the <see cref="SpriteTile"/> to render, or <c>null</c> once the hit sequence completes.
+        /// </summary>
+        internal static SpriteTile AdvanceHitState(
+            ref bool isHit,
+            ref double hitAnimTime,
+            ref double kirbyX,
+            double delta60,
+            FormDef normalForm,
+            int scale = 2) {
+            if (!isHit) {
+                return null;
+            }
+
+            if (normalForm == null || normalForm.Hit == null || !normalForm.Hit.HasFrames()) {
+                isHit = false;
+                hitAnimTime = 0.0;
+                return null;
+            }
+
+            int idx = (int)Math.Floor(hitAnimTime);
+
+            if (idx < 0 || idx >= normalForm.Hit.Frames.Length) {
+                isHit = false;
+                hitAnimTime = 0.0;
+                return null;
+            }
+
+            double nextAnimTime = hitAnimTime + normalForm.Hit.Speed * delta60;
+
+            if (hitAnimTime < HIT_PUSHBACK_FRAMES && nextAnimTime > hitAnimTime) {
+                double pushbackTicks = Math.Min(nextAnimTime, (double)HIT_PUSHBACK_FRAMES) - hitAnimTime;
+                kirbyX -= HIT_PUSHBACK_SPEED * scale * pushbackTicks;
+            }
+
+            SpriteTile frame = normalForm.Hit.Frames[idx];
+            hitAnimTime = nextAnimTime;
+            return frame;
+        }
+
+        private void ClearEnemyAfterContact() {
+            _lastEnemyRenderedTile = null;
+
+            if (_enemyOverlay != null && !_enemyOverlay.IsCleared) {
+                _enemyOverlay.ClearOverlay(_scale);
+            }
+
+            _enemySpawnTimerSeconds = NextEnemySpawnInterval(_rng, ENEMY_SPAWN_MIN_SECONDS, ENEMY_SPAWN_MAX_SECONDS);
+        }
+
+        /// <summary>
         /// Main ~60 Hz update loop driving input idle detection, fullscreen auto-hide,
         /// sleep/wake state transitions, cursor guard proximity, jump physics, and frame rendering.
         /// </summary>
@@ -996,7 +1120,8 @@ namespace KirbyTaskbarBuddy {
                 NotifyUserActivity();
             }
             else if (_idleSleepSeconds > 0 && _sleepState == SleepState.Awake && !_isJumping &&
-                     _swallowState == SwallowState.None && _sleepFrames != null && _sleepFrames.Length >= 8) {
+                     _swallowState == SwallowState.None && !_isHit && _sleepFrames != null &&
+                     _sleepFrames.Length >= 8) {
                 double idleSeconds = (nowMs - _lastInputMs) / 1000.0;
 
                 if (idleSeconds >= _idleSleepSeconds) {
@@ -1064,9 +1189,23 @@ namespace KirbyTaskbarBuddy {
                     return;
                 }
 
+                if (_combatEnabled &&
+                    TryTriggerEnemyHit(_forms, ref _currentForm, _sleepState, _isJumping, _swallowState, ref _isHit,
+                        ref _hitAnimTime, ref _activeEnemy, _kirbyX, _enemyX, _scale)) {
+                    _animTime = 0.0;
+                    ClearEnemyAfterContact();
+                }
+
+                if (_isHit) {
+                    _activeVfxTile = null;
+                    _activeVfxClip = null;
+                    frameToRender = AdvanceHitState(ref _isHit, ref _hitAnimTime, ref _kirbyX, delta60, _currentForm,
+                        _scale);
+                }
+
                 bool startedInhaleThisTick = false;
 
-                if (_swallowState == SwallowState.None &&
+                if (!_isHit && _swallowState == SwallowState.None &&
                     CanStartInhale(_currentForm, _sleepState, _isJumping, _swallowState, _activeEnemy, _kirbyX, _enemyX,
                         _scale)) {
                     _swallowState = SwallowState.Inhaling;
@@ -1076,7 +1215,7 @@ namespace KirbyTaskbarBuddy {
                     startedInhaleThisTick = true;
                 }
 
-                if (_swallowState == SwallowState.Inhaling) {
+                if (!_isHit && _swallowState == SwallowState.Inhaling) {
                     if (!_combatEnabled || _activeEnemy == null || _enemyX < _kirbyX ||
                         _currentForm.Inhale == null || !_currentForm.Inhale.HasFrames()) {
                         _swallowState = SwallowState.None;
@@ -1113,7 +1252,7 @@ namespace KirbyTaskbarBuddy {
                     }
                 }
 
-                if (_swallowState == SwallowState.None) {
+                if (_swallowState == SwallowState.None && !_isHit) {
                     _activeVfxTile = null;
                     _activeVfxClip = null;
 
@@ -1141,7 +1280,15 @@ namespace KirbyTaskbarBuddy {
                         _kirbyX = workArea.Left - halfWidth;
                     }
 
-                    if (useJump) {
+                    if (_combatEnabled &&
+                        TryTriggerEnemyHit(_forms, ref _currentForm, _sleepState, _isJumping, _swallowState,
+                            ref _isHit, ref _hitAnimTime, ref _activeEnemy, _kirbyX, _enemyX, _scale)) {
+                        _animTime = 0.0;
+                        ClearEnemyAfterContact();
+                        frameToRender = AdvanceHitState(ref _isHit, ref _hitAnimTime, ref _kirbyX, delta60,
+                            _currentForm, _scale);
+                    }
+                    else if (useJump) {
                         frameToRender = activeClip.Frames[GetJumpFrameIndex(_jumpVelY)];
                     }
                     else {
@@ -1395,7 +1542,7 @@ namespace KirbyTaskbarBuddy {
         /// a second time reverts Kirby back to Normal form).
         /// </summary>
         private void HandleKeySwitch(string keyName) {
-            if (keyName == null || _swallowState != SwallowState.None) {
+            if (keyName == null || _swallowState != SwallowState.None || _isHit) {
                 return;
             }
 
@@ -1451,6 +1598,8 @@ namespace KirbyTaskbarBuddy {
                 _lastEnemyRenderedTile = null;
                 _swallowState = SwallowState.None;
                 _swallowAnimTime = 0.0;
+                _isHit = false;
+                _hitAnimTime = 0.0;
                 _activeVfxTile = null;
                 _activeVfxClip = null;
                 _lastVfxRenderedTile = null;

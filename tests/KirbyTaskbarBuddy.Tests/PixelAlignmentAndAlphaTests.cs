@@ -73,6 +73,10 @@ namespace KirbyTaskbarBuddy.Tests
                     {
                         AssertClipPremultipliedAlpha(form.Name, "SwallowAbility", form.SwallowAbility);
                     }
+                    if (form.Hit != null)
+                    {
+                        AssertClipPremultipliedAlpha(form.Name, "Hit", form.Hit);
+                    }
                 }
 
                 foreach (EnemyDef enemy in enemies)
@@ -134,6 +138,10 @@ namespace KirbyTaskbarBuddy.Tests
                     if (form.SwallowAbility != null)
                     {
                         AssertFeetAlignedToFloor(form.Name, "SwallowAbility", form.SwallowAbility.RawFrames);
+                    }
+                    if (form.Hit != null)
+                    {
+                        AssertFeetAlignedToFloor(form.Name, "Hit", form.Hit.RawFrames);
                     }
 
                     if (form.Guard.Pivot == PivotMode.MirrorGuard)

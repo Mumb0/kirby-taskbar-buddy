@@ -126,6 +126,7 @@ namespace KirbyTaskbarBuddy {
                     ExpandBounds(form.Mouthful, ref reqW, ref reqH);
                     ExpandBounds(form.Swallow, ref reqW, ref reqH);
                     ExpandBounds(form.SwallowAbility, ref reqW, ref reqH);
+                    ExpandBounds(form.Hit, ref reqW, ref reqH);
 
                     using (FastSheet rawSheet = OpenSpriteSheet(form.FileName, reqW, reqH)) {
                         if (rawSheet == null) {
@@ -144,6 +145,7 @@ namespace KirbyTaskbarBuddy {
                         LoadClip(rawSheet, form.Mouthful, scratch);
                         LoadClip(rawSheet, form.Swallow, scratch);
                         LoadClip(rawSheet, form.SwallowAbility, scratch);
+                        LoadClip(rawSheet, form.Hit, scratch);
 
                         if (form.SwallowAbility != null) {
                             CompositeSwallowAbilityParticles(form.SwallowAbility, scratch);

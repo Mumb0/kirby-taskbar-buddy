@@ -771,7 +771,8 @@ namespace KirbyTaskbarBuddy {
 
         /// <summary>
         /// Checks whether Kirby can begin inhaling an approaching enemy: Kirby must be awake, on the ground,
-        /// in Normal form with an <see cref="FormDef.Inhale"/> clip, and the enemy must be in front of Kirby within <see cref="INHALE_RANGE"/>.
+        /// not guarding, in Normal form with an <see cref="FormDef.Inhale"/> clip, and the enemy must be in front
+        /// of Kirby within <see cref="INHALE_RANGE"/>.
         /// </summary>
         internal static bool CanStartInhale(
             FormDef currentForm,
@@ -781,8 +782,9 @@ namespace KirbyTaskbarBuddy {
             EnemyDef activeEnemy,
             double kirbyX,
             double enemyX,
-            int scale) {
-            if (sleepState != SleepState.Awake || isJumping || swallowState != SwallowState.None) {
+            int scale,
+            bool isGuarding = false) {
+            if (sleepState != SleepState.Awake || isJumping || isGuarding || swallowState != SwallowState.None) {
                 return false;
             }
 
@@ -990,7 +992,7 @@ namespace KirbyTaskbarBuddy {
 
         /// <summary>
         /// Checks whether Kirby is in contact with an active enemy and should take damage:
-        /// Kirby must be awake, on the ground, not currently inhaling/swallowing or already hit,
+        /// Kirby must be awake, on the ground, not guarding, not currently inhaling/swallowing or already hit,
         /// and within <see cref="ENEMY_CONTACT_DISTANCE"/> of the enemy.
         /// </summary>
         internal static bool CanTakeEnemyHit(
@@ -1001,9 +1003,10 @@ namespace KirbyTaskbarBuddy {
             EnemyDef activeEnemy,
             double kirbyX,
             double enemyX,
-            int scale) {
-            if (sleepState != SleepState.Awake || isJumping || swallowState != SwallowState.None || isHit ||
-                activeEnemy == null) {
+            int scale,
+            bool isGuarding = false) {
+            if (sleepState != SleepState.Awake || isJumping || isGuarding || swallowState != SwallowState.None ||
+                isHit || activeEnemy == null) {
                 return false;
             }
 
@@ -1025,8 +1028,10 @@ namespace KirbyTaskbarBuddy {
             ref EnemyDef activeEnemy,
             double kirbyX,
             double enemyX,
-            int scale) {
-            if (!CanTakeEnemyHit(sleepState, isJumping, swallowState, isHit, activeEnemy, kirbyX, enemyX, scale)) {
+            int scale,
+            bool isGuarding = false) {
+            if (!CanTakeEnemyHit(sleepState, isJumping, swallowState, isHit, activeEnemy, kirbyX, enemyX, scale,
+                    isGuarding)) {
                 return false;
             }
 
@@ -1189,9 +1194,14 @@ namespace KirbyTaskbarBuddy {
                     return;
                 }
 
+                // Check if mouse pointer is close to Kirby's body on the taskbar (only guards when on the ground).
+                bool isMouseNear = IsMouseNearKirby(mouse, _kirbyX, workArea.Bottom, _scale, _isJumping);
+                bool isGuarding = !_isJumping && isMouseNear && _currentForm.Guard != null &&
+                                  _currentForm.Guard.HasFrames();
+
                 if (_combatEnabled &&
                     TryTriggerEnemyHit(_forms, ref _currentForm, _sleepState, _isJumping, _swallowState, ref _isHit,
-                        ref _hitAnimTime, ref _activeEnemy, _kirbyX, _enemyX, _scale)) {
+                        ref _hitAnimTime, ref _activeEnemy, _kirbyX, _enemyX, _scale, isGuarding)) {
                     _animTime = 0.0;
                     ClearEnemyAfterContact();
                 }
@@ -1207,7 +1217,7 @@ namespace KirbyTaskbarBuddy {
 
                 if (!_isHit && _swallowState == SwallowState.None &&
                     CanStartInhale(_currentForm, _sleepState, _isJumping, _swallowState, _activeEnemy, _kirbyX, _enemyX,
-                        _scale)) {
+                        _scale, isGuarding)) {
                     _swallowState = SwallowState.Inhaling;
                     _swallowAnimTime = 0.0;
                     _vfxAnimTime = 0.0;
@@ -1256,11 +1266,8 @@ namespace KirbyTaskbarBuddy {
                     _activeVfxTile = null;
                     _activeVfxClip = null;
 
-                    // Check if mouse pointer is close to Kirby's body on the taskbar (only guards when on the ground).
-                    bool isMouseNear = IsMouseNearKirby(mouse, _kirbyX, workArea.Bottom, _scale, _isJumping);
-
                     bool useJump = _isJumping && _currentForm.Jump != null && _currentForm.Jump.HasFrames(5);
-                    bool useGuard = !useJump && isMouseNear && _currentForm.Guard != null && _currentForm.Guard.HasFrames();
+                    bool useGuard = !useJump && isGuarding;
                     AnimClip activeClip = useJump ? _currentForm.Jump : useGuard ? _currentForm.Guard : _currentForm.Walk;
 
                     if (_isJumping) {
@@ -1282,7 +1289,7 @@ namespace KirbyTaskbarBuddy {
 
                     if (_combatEnabled &&
                         TryTriggerEnemyHit(_forms, ref _currentForm, _sleepState, _isJumping, _swallowState,
-                            ref _isHit, ref _hitAnimTime, ref _activeEnemy, _kirbyX, _enemyX, _scale)) {
+                            ref _isHit, ref _hitAnimTime, ref _activeEnemy, _kirbyX, _enemyX, _scale, useGuard)) {
                         _animTime = 0.0;
                         ClearEnemyAfterContact();
                         frameToRender = AdvanceHitState(ref _isHit, ref _hitAnimTime, ref _kirbyX, delta60,

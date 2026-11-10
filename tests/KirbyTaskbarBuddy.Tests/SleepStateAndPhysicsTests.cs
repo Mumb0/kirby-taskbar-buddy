@@ -334,10 +334,11 @@ namespace KirbyTaskbarBuddy.Tests
             // Enemy already behind Kirby (enemyX < kirbyX):
             Assert.False(KirbyTaskbarBuddyContext.CanStartInhale(normalForm, SleepState.Awake, false, SwallowState.None, enemy, 100.0, 99.0, 2));
 
-            // Copy ability form (not "normal"), sleeping, jumping, already inhaling, or no active enemy:
+            // Copy ability form (not "normal"), sleeping, jumping, guarding, already inhaling, or no active enemy:
             Assert.False(KirbyTaskbarBuddyContext.CanStartInhale(swordForm, SleepState.Awake, false, SwallowState.None, enemy, 100.0, 140.0, 2));
             Assert.False(KirbyTaskbarBuddyContext.CanStartInhale(normalForm, SleepState.Sleeping, false, SwallowState.None, enemy, 100.0, 140.0, 2));
             Assert.False(KirbyTaskbarBuddyContext.CanStartInhale(normalForm, SleepState.Awake, true, SwallowState.None, enemy, 100.0, 140.0, 2));
+            Assert.False(KirbyTaskbarBuddyContext.CanStartInhale(normalForm, SleepState.Awake, false, SwallowState.None, enemy, 100.0, 140.0, 2, isGuarding: true));
             Assert.False(KirbyTaskbarBuddyContext.CanStartInhale(normalForm, SleepState.Awake, false, SwallowState.Inhaling, enemy, 100.0, 140.0, 2));
             Assert.False(KirbyTaskbarBuddyContext.CanStartInhale(normalForm, SleepState.Awake, false, SwallowState.None, null, 100.0, 140.0, 2));
         }
@@ -381,12 +382,19 @@ namespace KirbyTaskbarBuddy.Tests
             double kirbyX = 200.0;
             double contactThreshold = KirbyTaskbarBuddyContext.ENEMY_CONTACT_DISTANCE * scale;
 
-            // Outside contact distance, jumping, sleeping, or inhaling does not trigger enemy hit:
+            // Outside contact distance, jumping, guarding, sleeping, or inhaling does not trigger enemy hit:
             Assert.False(KirbyTaskbarBuddyContext.TryTriggerEnemyHit(
                 forms, ref currentForm, SleepState.Awake, false, SwallowState.None,
                 ref isHit, ref hitAnimTime, ref activeEnemy, kirbyX, kirbyX + contactThreshold + 1.0, scale));
+            Assert.False(KirbyTaskbarBuddyContext.TryTriggerEnemyHit(
+                forms, ref currentForm, SleepState.Awake, false, SwallowState.None,
+                ref isHit, ref hitAnimTime, ref activeEnemy, kirbyX, kirbyX, scale, isGuarding: true));
+            Assert.Same(swordForm, currentForm);
+            Assert.Same(enemy, activeEnemy);
             Assert.False(KirbyTaskbarBuddyContext.CanTakeEnemyHit(
                 SleepState.Awake, true, SwallowState.None, false, enemy, kirbyX, kirbyX, scale));
+            Assert.False(KirbyTaskbarBuddyContext.CanTakeEnemyHit(
+                SleepState.Awake, false, SwallowState.None, false, enemy, kirbyX, kirbyX, scale, isGuarding: true));
             Assert.False(KirbyTaskbarBuddyContext.CanTakeEnemyHit(
                 SleepState.Sleeping, false, SwallowState.None, false, enemy, kirbyX, kirbyX, scale));
             Assert.False(KirbyTaskbarBuddyContext.CanTakeEnemyHit(

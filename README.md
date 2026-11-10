@@ -40,16 +40,23 @@ same ability key again returns him to Normal Kirby.
 
 ### Taskbar Combat & Inhale
 
-When **Combat** is enabled, classic enemies (**Waddle Dee** and **Waddle Doo**) periodically spawn on
-the right side of your screen and stroll across the taskbar:
+When **Combat** is enabled, enemies periodically spawn on the right side of your screen and stroll
+across the taskbar:
 
 - **Inhale & Copy Abilities:** When in **Normal** form, Kirby automatically inhales approaching
-  enemies with wind particle effects, holds them in a mouthful, and swallows them. Swallowing an
-  ability-granting enemy like **Waddle Doo** plays the classic ability-acquisition star animation and
-  transforms Kirby into **Beam Kirby**!
+  enemies with wind particle effects, holds them in a mouthful, and swallows them. If the swallowed
+  enemy grants a copy ability, Kirby plays the classic ability-acquisition star animation and
+  transforms into that ability!
 - **Enemy Collisions & Knockback:** If Kirby walks into an enemy while holding a copy ability (and
   not guarding or jumping over it), both Kirby and the enemy recoil backward from the impact and
   Kirby loses his copy ability back to Normal form.
+
+#### Available Enemies
+
+| Enemy          | Copy Ability Granted |
+|:---------------|:---------------------|
+| **Waddle Dee** | None *(Normal)*      |
+| **Waddle Doo** | **Beam** (<kbd>e</kbd>) |
 
 ### Spacebar Jump
 

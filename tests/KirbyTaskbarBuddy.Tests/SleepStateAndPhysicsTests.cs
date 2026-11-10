@@ -378,19 +378,25 @@ namespace KirbyTaskbarBuddy.Tests
             bool isHit = false;
             double hitAnimTime = 0.0;
             EnemyDef activeEnemy = enemy;
+            bool isEnemyHit = false;
+            double enemyHitAnimTime = 0.0;
             int scale = 2;
             double kirbyX = 200.0;
             double contactThreshold = KirbyTaskbarBuddyContext.ENEMY_CONTACT_DISTANCE * scale;
+            double enemyX = kirbyX + contactThreshold;
 
             // Outside contact distance, jumping, guarding, sleeping, or inhaling does not trigger enemy hit:
             Assert.False(KirbyTaskbarBuddyContext.TryTriggerEnemyHit(
                 forms, ref currentForm, SleepState.Awake, false, SwallowState.None,
-                ref isHit, ref hitAnimTime, ref activeEnemy, kirbyX, kirbyX + contactThreshold + 1.0, scale));
+                ref isHit, ref hitAnimTime, ref activeEnemy, ref isEnemyHit, ref enemyHitAnimTime,
+                kirbyX, kirbyX + contactThreshold + 1.0, scale));
             Assert.False(KirbyTaskbarBuddyContext.TryTriggerEnemyHit(
                 forms, ref currentForm, SleepState.Awake, false, SwallowState.None,
-                ref isHit, ref hitAnimTime, ref activeEnemy, kirbyX, kirbyX, scale, isGuarding: true));
+                ref isHit, ref hitAnimTime, ref activeEnemy, ref isEnemyHit, ref enemyHitAnimTime,
+                kirbyX, kirbyX, scale, isGuarding: true));
             Assert.Same(swordForm, currentForm);
             Assert.Same(enemy, activeEnemy);
+            Assert.False(isEnemyHit);
             Assert.False(KirbyTaskbarBuddyContext.CanTakeEnemyHit(
                 SleepState.Awake, true, SwallowState.None, false, enemy, kirbyX, kirbyX, scale));
             Assert.False(KirbyTaskbarBuddyContext.CanTakeEnemyHit(
@@ -400,61 +406,84 @@ namespace KirbyTaskbarBuddy.Tests
             Assert.False(KirbyTaskbarBuddyContext.CanTakeEnemyHit(
                 SleepState.Awake, false, SwallowState.Inhaling, false, enemy, kirbyX, kirbyX, scale));
 
-            // Walking into the enemy within contact distance immediately strips Sword ability back to Normal,
-            // despawns the enemy, and starts the hit animation:
+            // Walking into the enemy within contact distance immediately strips Sword ability back to Normal
+            // and enters the hit animation for both Kirby and the enemy:
             Assert.True(KirbyTaskbarBuddyContext.TryTriggerEnemyHit(
                 forms, ref currentForm, SleepState.Awake, false, SwallowState.None,
-                ref isHit, ref hitAnimTime, ref activeEnemy, kirbyX, kirbyX + contactThreshold, scale));
+                ref isHit, ref hitAnimTime, ref activeEnemy, ref isEnemyHit, ref enemyHitAnimTime,
+                kirbyX, enemyX, scale));
             Assert.Same(normalForm, currentForm);
             Assert.True(isHit);
             Assert.Equal(0.0, hitAnimTime);
-            Assert.Null(activeEnemy);
+            Assert.Same(enemy, activeEnemy);
+            Assert.True(isEnemyHit);
+            Assert.Equal(0.0, enemyHitAnimTime);
 
-            // First 8 ticks of frame 0 apply backward recoil to kirbyX:
-            double startX = kirbyX;
+            // First 8 ticks: Kirby recoils left and the enemy recoils right by the exact same distance:
+            double startKirbyX = kirbyX;
+            double startEnemyX = enemyX;
             for (int tick = 0; tick < 8; tick++)
             {
-                double prevX = kirbyX;
+                double prevKirbyX = kirbyX;
+                double prevEnemyX = enemyX;
                 SpriteTile frame = KirbyTaskbarBuddyContext.AdvanceHitState(ref isHit, ref hitAnimTime, ref kirbyX, 1.0, currentForm, scale);
+                bool enemyActive = KirbyTaskbarBuddyContext.StepHitEnemyPhysics(ref enemyX, ref enemyHitAnimTime, activeEnemy, 1.0, scale);
                 Assert.True(isHit);
+                Assert.True(enemyActive);
                 Assert.Same(rawHitTiles[0], frame);
-                Assert.Equal(prevX - KirbyTaskbarBuddyContext.HIT_PUSHBACK_SPEED * scale, kirbyX, 5);
+                Assert.Equal(prevKirbyX - KirbyTaskbarBuddyContext.HIT_PUSHBACK_SPEED * scale, kirbyX, 5);
+                Assert.Equal(prevEnemyX + KirbyTaskbarBuddyContext.HIT_PUSHBACK_SPEED * scale, enemyX, 5);
             }
-            double pushedBackX = startX - 8 * KirbyTaskbarBuddyContext.HIT_PUSHBACK_SPEED * scale;
-            Assert.Equal(pushedBackX, kirbyX, 5);
+            double expectedPushbackDist = 8 * KirbyTaskbarBuddyContext.HIT_PUSHBACK_SPEED * scale;
+            double pushedBackKirbyX = startKirbyX - expectedPushbackDist;
+            double pushedBackEnemyX = startEnemyX + expectedPushbackDist;
+            Assert.Equal(pushedBackKirbyX, kirbyX, 5);
+            Assert.Equal(pushedBackEnemyX, enemyX, 5);
 
-            // Next 8 ticks hold frame 0 without further recoil (16 frames total of frame 0):
+            // Next 8 ticks (ticks 8..15): Kirby holds frame 0 and enemy holds its hit state without further pushback:
             for (int tick = 0; tick < 8; tick++)
             {
                 SpriteTile frame = KirbyTaskbarBuddyContext.AdvanceHitState(ref isHit, ref hitAnimTime, ref kirbyX, 1.0, currentForm, scale);
+                bool enemyActive = KirbyTaskbarBuddyContext.StepHitEnemyPhysics(ref enemyX, ref enemyHitAnimTime, activeEnemy, 1.0, scale);
                 Assert.True(isHit);
+                Assert.True(enemyActive);
                 Assert.Same(rawHitTiles[0], frame);
-                Assert.Equal(pushedBackX, kirbyX, 5);
+                Assert.Equal(pushedBackKirbyX, kirbyX, 5);
+                Assert.Equal(pushedBackEnemyX, enemyX, 5);
             }
 
-            // Next 9 ticks hold frame 1 without recoil:
-            for (int tick = 0; tick < 9; tick++)
+            // Next 8 ticks (ticks 16..23): Kirby plays frame 1 and enemy finishes the remaining 8 frames of its 24-frame hit state:
+            for (int tick = 0; tick < 8; tick++)
             {
                 SpriteTile frame = KirbyTaskbarBuddyContext.AdvanceHitState(ref isHit, ref hitAnimTime, ref kirbyX, 1.0, currentForm, scale);
+                bool enemyActive = KirbyTaskbarBuddyContext.StepHitEnemyPhysics(ref enemyX, ref enemyHitAnimTime, activeEnemy, 1.0, scale);
                 Assert.True(isHit);
+                Assert.True(enemyActive);
                 Assert.Same(rawHitTiles[1], frame);
-                Assert.Equal(pushedBackX, kirbyX, 5);
+                Assert.Equal(pushedBackKirbyX, kirbyX, 5);
+                Assert.Equal(pushedBackEnemyX, enemyX, 5);
             }
 
-            // Next 9 ticks hold standing frame (frame 2) before resuming walking:
+            // On tick 24, the enemy completes its 24-frame hit sequence and disappears, while Kirby plays his 9th tick of frame 1:
+            Assert.False(KirbyTaskbarBuddyContext.StepHitEnemyPhysics(ref enemyX, ref enemyHitAnimTime, activeEnemy, 1.0, scale));
+            SpriteTile frameTick24 = KirbyTaskbarBuddyContext.AdvanceHitState(ref isHit, ref hitAnimTime, ref kirbyX, 1.0, currentForm, scale);
+            Assert.True(isHit);
+            Assert.Same(rawHitTiles[1], frameTick24);
+
+            // Next 9 ticks (ticks 25..33): Kirby holds standing frame (frame 2) before resuming walking:
             for (int tick = 0; tick < 9; tick++)
             {
                 SpriteTile frame = KirbyTaskbarBuddyContext.AdvanceHitState(ref isHit, ref hitAnimTime, ref kirbyX, 1.0, currentForm, scale);
                 Assert.True(isHit);
                 Assert.Same(rawHitTiles[2], frame);
-                Assert.Equal(pushedBackX, kirbyX, 5);
+                Assert.Equal(pushedBackKirbyX, kirbyX, 5);
             }
 
-            // On tick 34, hit animation finishes and returns null:
+            // On tick 34, Kirby's hit animation finishes and returns null:
             SpriteTile doneFrame = KirbyTaskbarBuddyContext.AdvanceHitState(ref isHit, ref hitAnimTime, ref kirbyX, 1.0, currentForm, scale);
             Assert.False(isHit);
             Assert.Equal(0.0, hitAnimTime);
-            Assert.Equal(pushedBackX, kirbyX, 5);
+            Assert.Equal(pushedBackKirbyX, kirbyX, 5);
             Assert.Null(doneFrame);
         }
 

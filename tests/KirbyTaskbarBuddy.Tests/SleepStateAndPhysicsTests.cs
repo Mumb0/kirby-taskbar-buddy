@@ -190,21 +190,21 @@ namespace KirbyTaskbarBuddy.Tests
         [Fact]
         public void NormalizeScale_And_NormalizeSleepTimeout_AcceptValidValuesAndFallbackOnInvalid()
         {
-            Assert.Equal(1, KirbyTaskbarBuddyContext.NormalizeScale(1));
-            Assert.Equal(2, KirbyTaskbarBuddyContext.NormalizeScale(2));
-            Assert.Equal(3, KirbyTaskbarBuddyContext.NormalizeScale(3));
-            Assert.Equal(4, KirbyTaskbarBuddyContext.NormalizeScale(4));
-            Assert.Equal(2, KirbyTaskbarBuddyContext.NormalizeScale(0));
-            Assert.Equal(2, KirbyTaskbarBuddyContext.NormalizeScale(5));
-            Assert.Equal(2, KirbyTaskbarBuddyContext.NormalizeScale(-1));
+            Assert.Equal(1, AppSettings.NormalizeScale(1));
+            Assert.Equal(2, AppSettings.NormalizeScale(2));
+            Assert.Equal(3, AppSettings.NormalizeScale(3));
+            Assert.Equal(4, AppSettings.NormalizeScale(4));
+            Assert.Equal(2, AppSettings.NormalizeScale(0));
+            Assert.Equal(2, AppSettings.NormalizeScale(5));
+            Assert.Equal(2, AppSettings.NormalizeScale(-1));
 
-            foreach (double valid in KirbyTaskbarBuddyContext.SleepTimeoutValues)
+            foreach (double valid in AppSettings.SleepTimeoutValues)
             {
-                Assert.Equal(valid, KirbyTaskbarBuddyContext.NormalizeSleepTimeout(valid));
+                Assert.Equal(valid, AppSettings.NormalizeSleepTimeout(valid));
             }
-            Assert.Equal(300.0, KirbyTaskbarBuddyContext.NormalizeSleepTimeout(0.0));
-            Assert.Equal(300.0, KirbyTaskbarBuddyContext.NormalizeSleepTimeout(45.0));
-            Assert.Equal(300.0, KirbyTaskbarBuddyContext.NormalizeSleepTimeout(-99.0));
+            Assert.Equal(300.0, AppSettings.NormalizeSleepTimeout(0.0));
+            Assert.Equal(300.0, AppSettings.NormalizeSleepTimeout(45.0));
+            Assert.Equal(300.0, AppSettings.NormalizeSleepTimeout(-99.0));
         }
 
         [Fact]
@@ -688,61 +688,93 @@ namespace KirbyTaskbarBuddy.Tests
         [Fact]
         public void FullscreenFilterHelpers_IgnoreShellClassesAndOverlayStyles()
         {
-            Assert.True(KirbyTaskbarBuddyContext.IsShellOrOverlayWindowClass("Progman"));
-            Assert.True(KirbyTaskbarBuddyContext.IsShellOrOverlayWindowClass("WorkerW"));
-            Assert.True(KirbyTaskbarBuddyContext.IsShellOrOverlayWindowClass("Shell_TrayWnd"));
-            Assert.True(KirbyTaskbarBuddyContext.IsShellOrOverlayWindowClass("Shell_SecondaryTrayWnd"));
-            Assert.True(KirbyTaskbarBuddyContext.IsShellOrOverlayWindowClass("Windows.UI.Core.CoreWindow"));
-            Assert.True(KirbyTaskbarBuddyContext.IsShellOrOverlayWindowClass("XamlExplorerHostIslandWindow"));
-            Assert.True(KirbyTaskbarBuddyContext.IsShellOrOverlayWindowClass("MultitaskingViewFrame"));
-            Assert.True(KirbyTaskbarBuddyContext.IsShellOrOverlayWindowClass("ForegroundStaging"));
+            Assert.True(DesktopEnvironmentMonitor.IsShellOrOverlayWindowClass("Progman"));
+            Assert.True(DesktopEnvironmentMonitor.IsShellOrOverlayWindowClass("WorkerW"));
+            Assert.True(DesktopEnvironmentMonitor.IsShellOrOverlayWindowClass("Shell_TrayWnd"));
+            Assert.True(DesktopEnvironmentMonitor.IsShellOrOverlayWindowClass("Shell_SecondaryTrayWnd"));
+            Assert.True(DesktopEnvironmentMonitor.IsShellOrOverlayWindowClass("Windows.UI.Core.CoreWindow"));
+            Assert.True(DesktopEnvironmentMonitor.IsShellOrOverlayWindowClass("XamlExplorerHostIslandWindow"));
+            Assert.True(DesktopEnvironmentMonitor.IsShellOrOverlayWindowClass("MultitaskingViewFrame"));
+            Assert.True(DesktopEnvironmentMonitor.IsShellOrOverlayWindowClass("ForegroundStaging"));
 
-            Assert.False(KirbyTaskbarBuddyContext.IsShellOrOverlayWindowClass(null));
-            Assert.False(KirbyTaskbarBuddyContext.IsShellOrOverlayWindowClass(""));
-            Assert.False(KirbyTaskbarBuddyContext.IsShellOrOverlayWindowClass("UnityWndClass"));
-            Assert.False(KirbyTaskbarBuddyContext.IsShellOrOverlayWindowClass("UnrealWindow"));
+            Assert.False(DesktopEnvironmentMonitor.IsShellOrOverlayWindowClass(null));
+            Assert.False(DesktopEnvironmentMonitor.IsShellOrOverlayWindowClass(""));
+            Assert.False(DesktopEnvironmentMonitor.IsShellOrOverlayWindowClass("UnityWndClass"));
+            Assert.False(DesktopEnvironmentMonitor.IsShellOrOverlayWindowClass("UnrealWindow"));
 
-            Assert.True(KirbyTaskbarBuddyContext.IsNonFullscreenOverlayExStyle(NativeMethods.WS_EX_TRANSPARENT));
-            Assert.True(KirbyTaskbarBuddyContext.IsNonFullscreenOverlayExStyle(NativeMethods.WS_EX_NOACTIVATE));
-            Assert.True(KirbyTaskbarBuddyContext.IsNonFullscreenOverlayExStyle(NativeMethods.WS_EX_TOOLWINDOW));
-            Assert.False(KirbyTaskbarBuddyContext.IsNonFullscreenOverlayExStyle(0));
-            Assert.False(KirbyTaskbarBuddyContext.IsNonFullscreenOverlayExStyle(NativeMethods.WS_EX_TOPMOST));
+            Assert.True(DesktopEnvironmentMonitor.IsNonFullscreenOverlayExStyle(NativeMethods.WS_EX_TRANSPARENT));
+            Assert.True(DesktopEnvironmentMonitor.IsNonFullscreenOverlayExStyle(NativeMethods.WS_EX_NOACTIVATE));
+            Assert.True(DesktopEnvironmentMonitor.IsNonFullscreenOverlayExStyle(NativeMethods.WS_EX_TOOLWINDOW));
+            Assert.False(DesktopEnvironmentMonitor.IsNonFullscreenOverlayExStyle(0));
+            Assert.False(DesktopEnvironmentMonitor.IsNonFullscreenOverlayExStyle(NativeMethods.WS_EX_TOPMOST));
         }
 
         [Fact]
         public void TryParseRegistryHelpers_ParseValidValues_AndRejectCorruptOrNullWithoutThrowing()
         {
             int intResult;
-            Assert.True(KirbyTaskbarBuddyContext.TryParseRegistryInt(3, out intResult));
+            Assert.True(RegistrySettingsService.TryParseRegistryInt(3, out intResult));
             Assert.Equal(3, intResult);
 
-            Assert.True(KirbyTaskbarBuddyContext.TryParseRegistryInt(4L, out intResult));
+            Assert.True(RegistrySettingsService.TryParseRegistryInt(4L, out intResult));
             Assert.Equal(4, intResult);
 
-            Assert.True(KirbyTaskbarBuddyContext.TryParseRegistryInt("2", out intResult));
+            Assert.True(RegistrySettingsService.TryParseRegistryInt("2", out intResult));
             Assert.Equal(2, intResult);
 
-            Assert.False(KirbyTaskbarBuddyContext.TryParseRegistryInt(null, out intResult));
-            Assert.False(KirbyTaskbarBuddyContext.TryParseRegistryInt("invalid", out intResult));
-            Assert.False(KirbyTaskbarBuddyContext.TryParseRegistryInt(long.MaxValue, out intResult));
-            Assert.False(KirbyTaskbarBuddyContext.TryParseRegistryInt(new byte[] { 1, 2 }, out intResult));
+            Assert.False(RegistrySettingsService.TryParseRegistryInt(null, out intResult));
+            Assert.False(RegistrySettingsService.TryParseRegistryInt("invalid", out intResult));
+            Assert.False(RegistrySettingsService.TryParseRegistryInt(long.MaxValue, out intResult));
+            Assert.False(RegistrySettingsService.TryParseRegistryInt(new byte[] { 1, 2 }, out intResult));
 
             double doubleResult;
-            Assert.True(KirbyTaskbarBuddyContext.TryParseRegistryDouble(60, out doubleResult));
+            Assert.True(RegistrySettingsService.TryParseRegistryDouble(60, out doubleResult));
             Assert.Equal(60.0, doubleResult);
 
-            Assert.True(KirbyTaskbarBuddyContext.TryParseRegistryDouble(180L, out doubleResult));
+            Assert.True(RegistrySettingsService.TryParseRegistryDouble(180L, out doubleResult));
             Assert.Equal(180.0, doubleResult);
 
-            Assert.True(KirbyTaskbarBuddyContext.TryParseRegistryDouble(300.0, out doubleResult));
+            Assert.True(RegistrySettingsService.TryParseRegistryDouble(300.0, out doubleResult));
             Assert.Equal(300.0, doubleResult);
 
-            Assert.True(KirbyTaskbarBuddyContext.TryParseRegistryDouble("-1", out doubleResult));
+            Assert.True(RegistrySettingsService.TryParseRegistryDouble("-1", out doubleResult));
             Assert.Equal(-1.0, doubleResult);
 
-            Assert.False(KirbyTaskbarBuddyContext.TryParseRegistryDouble(null, out doubleResult));
-            Assert.False(KirbyTaskbarBuddyContext.TryParseRegistryDouble("not-a-number", out doubleResult));
-            Assert.False(KirbyTaskbarBuddyContext.TryParseRegistryDouble(new object(), out doubleResult));
+            Assert.False(RegistrySettingsService.TryParseRegistryDouble(null, out doubleResult));
+            Assert.False(RegistrySettingsService.TryParseRegistryDouble("not-a-number", out doubleResult));
+            Assert.False(RegistrySettingsService.TryParseRegistryDouble(new object(), out doubleResult));
+        }
+
+        [Fact]
+        public void GlobalKeyboardHook_DeduplicatesAutoRepeatUntilKeyUp_AndIdleMonitorTracksElapsedSeconds()
+        {
+            int keyDownCount = 0;
+            int initialDownCount = 0;
+
+            using (GlobalKeyboardHook hook = new GlobalKeyboardHook(
+                (vk, isInitial) =>
+                {
+                    keyDownCount++;
+                    if (isInitial) initialDownCount++;
+                },
+                installOsHook: false))
+            {
+                hook.ProcessKeyMessage(NativeMethods.WM_KEYDOWN, 0x31);
+                hook.ProcessKeyMessage(NativeMethods.WM_KEYDOWN, 0x31); // Auto-repeat while held
+                Assert.Equal(2, keyDownCount);
+                Assert.Equal(1, initialDownCount);
+
+                hook.ProcessKeyMessage(NativeMethods.WM_KEYUP, 0x31);
+                hook.ProcessKeyMessage(NativeMethods.WM_KEYDOWN, 0x31); // Pressed again after release
+                Assert.Equal(3, keyDownCount);
+                Assert.Equal(2, initialDownCount);
+            }
+
+            IdleActivityMonitor monitor = new IdleActivityMonitor(1000, new Point(10, 10));
+            Assert.Equal(4.5, monitor.GetIdleSeconds(5500), 5);
+            monitor.RecordActivity(5000);
+            Assert.Equal(0.5, monitor.GetIdleSeconds(5500), 5);
+            Assert.True(monitor.PollActivity(new Point(25, 10)));
         }
 
         [Fact]

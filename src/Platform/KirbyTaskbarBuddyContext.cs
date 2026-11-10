@@ -2,30 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
-using System.Globalization;
-using System.IO;
-using System.Reflection;
-using System.Runtime.InteropServices;
-using System.Security;
-using System.Text;
 using System.Windows.Forms;
-using Microsoft.Win32;
 
 namespace KirbyTaskbarBuddy {
 
     /// <summary>
-    /// Core application controller managing the system tray menu, Windows startup registry entry,
-    /// global keyboard hook, 60 Hz physics/animation loop, and idle sleep state machine.
+    /// Core application controller coordinating the system tray menu, registry persistence,
+    /// global keyboard hook, desktop environment monitor, 60 Hz physics/animation loop, and actor state machines.
     /// </summary>
     public class KirbyTaskbarBuddyContext : ApplicationContext {
-
-        private const string RUN_REG_KEY = @"Software\Microsoft\Windows\CurrentVersion\Run";
-        private const string SETTINGS_REG_KEY = @"Software\KirbyTaskbarBuddy";
-        private const string REG_VAL_SCALE = "Scale";
-        private const string REG_VAL_SLEEP_SECONDS = "SleepTimeoutSeconds";
-        private const string REG_VAL_COMBAT = "CombatEnabled";
-        private const string APP_NAME = "KirbyTaskbarBuddy";
-        private const string LEGACY_APP_NAME = "KirbyWallpaperKeyBridge";
 
         // Movement and jump physics constants (calibrated in unscaled 1x pixels per 60Hz tick)
         internal const double WALK_SPEED = 0.75;
@@ -40,35 +25,13 @@ namespace KirbyTaskbarBuddy {
         internal const int HIT_PUSHBACK_FRAMES = 8;
         internal const double HIT_PUSHBACK_SPEED = 1.5;
         internal const int ENEMY_HIT_FRAMES = 24;
-        internal static readonly double[] SleepTimeoutValues = new[] { 10.0, 30.0, 60.0, 180.0, 300.0, 600.0, -1.0 };
 
-        // Static reference to the hook delegate prevents the GC from collecting the callback while unmanaged code holds it.
-        private static NativeMethods.LowLevelKeyboardProc _proc;
-        private static IntPtr _hookID = IntPtr.Zero;
-
-        // Tracks currently held Virtual-Key codes so OS key auto-repeat while holding a key does not spam ability switches.
-        private static readonly HashSet<int> _downKeys = new HashSet<int>();
-        private static KirbyTaskbarBuddyContext _instance;
-
-        private bool _isPaused;
-        private bool _overlayEnabled = true;
-        private bool _combatEnabled = true;
-        private int _scale = 2;
-        private double _idleSleepSeconds = 300.0;
-
-        private readonly NotifyIcon _trayIcon;
-        private readonly MenuItem _overlayItem;
-        private readonly MenuItem _combatItem;
-        private readonly MenuItem _pauseItem;
-        private readonly MenuItem _startupItem;
-        private readonly MenuItem _scale1xItem;
-        private readonly MenuItem _scale2xItem;
-        private readonly MenuItem _scale3xItem;
-        private readonly MenuItem _scale4xItem;
-        private readonly MenuItem[] _sleepMenuItems;
-        private readonly double[] _sleepTimeoutValues;
-
+        private readonly AppSettings _settings = new AppSettings();
+        private readonly TrayMenuController _trayMenu;
         private readonly OverlayStage _stage;
+        private readonly GlobalKeyboardHook _keyboardHook;
+        private readonly IdleActivityMonitor _idleMonitor;
+        private readonly DesktopEnvironmentMonitor _envMonitor;
         private readonly Timer _animTimer;
         private readonly Stopwatch _stopwatch;
         private long _lastTickMs;
@@ -89,9 +52,6 @@ namespace KirbyTaskbarBuddy {
         private readonly SpriteTile[] _sleepFrames;
         private SleepState _sleepState = SleepState.Awake;
         private double _sleepAnimTime;
-        private long _lastInputMs;
-        private Point _lastMousePos;
-        private uint _lastSysInputTick;
 
         private SwallowState _swallowState = SwallowState.None;
         private double _swallowAnimTime;
@@ -107,115 +67,47 @@ namespace KirbyTaskbarBuddy {
         private bool _isJumping;
         private double _jumpY;
         private double _jumpVelY;
-        private IntPtr _lastForegroundWindow = IntPtr.Zero;
-
-        // Throttles fullscreen and screen working-area queries to once every 15 ticks (~240ms)
-        // and reuses a single StringBuilder to keep the 60Hz tick loop completely allocation-free.
-        private int _envCheckCounter;
-        private bool _isFullscreenCached;
-        private Rectangle _cachedWorkArea;
-        private readonly StringBuilder _classNameSb = new StringBuilder(64);
-        private IntPtr _trayIconHandle = IntPtr.Zero;
-        private readonly Icon _loadedTrayIcon;
 
         public KirbyTaskbarBuddyContext() {
-            _instance = this;
+            Icon loadedTrayIcon;
+            IntPtr trayIconHandle;
 
             FormDefinitions.PopulateForms(_forms, _keyToForm, out _currentForm);
             FormDefinitions.PopulateEnemies(_enemies);
-            SpriteLoader.LoadAllSpritesheets(_forms, _enemies, out _sleepFrames, out _loadedTrayIcon, out _trayIconHandle);
-            LoadSettings();
-            _kirbyX = -32 * _scale;
+            SpriteLoader.LoadAllSpritesheets(_forms, _enemies, out _sleepFrames, out loadedTrayIcon, out trayIconHandle);
+
+            RegistrySettingsService.LoadSettings(_settings);
+            _kirbyX = -32 * _settings.Scale;
             _inhaleVfx = new InhaleParticleEffect(_rng);
             _enemySpawnTimerSeconds = NextEnemySpawnInterval(_rng, ENEMY_SPAWN_MIN_SECONDS, ENEMY_SPAWN_MAX_SECONDS);
 
-            _overlayItem = new MenuItem("Show Foreground Taskbar Kirby", OnToggleOverlay) { Checked = _overlayEnabled };
-            _combatItem = new MenuItem("Combat", OnToggleCombat) { Checked = _combatEnabled };
-            _pauseItem = new MenuItem("Pause Key Switching", OnTogglePause);
+            bool startupEnabled = RegistrySettingsService.IsStartupEnabled();
 
-            if (IsStartupEnabled()) {
-                SetStartup(true);
+            if (startupEnabled) {
+                RegistrySettingsService.SetStartup(true);
             }
 
-            _startupItem = new MenuItem("Start with Windows", OnToggleStartup) { Checked = IsStartupEnabled() };
+            _trayMenu = new TrayMenuController(_settings, startupEnabled, loadedTrayIcon, trayIconHandle);
+            _trayMenu.OverlayToggled += OnToggleOverlay;
+            _trayMenu.CombatToggled += OnToggleCombat;
+            _trayMenu.ScaleSelected += SetScale;
+            _trayMenu.SleepTimeoutSelected += SetSleepTimeout;
+            _trayMenu.PauseToggled += OnTogglePause;
+            _trayMenu.StartupToggled += OnToggleStartup;
+            _trayMenu.ExitRequested += OnExit;
 
-            _scale1xItem = new MenuItem("1x (Small)", (s, e) => SetScale(1)) { Checked = _scale == 1 };
-            _scale2xItem = new MenuItem("2x (Default)", (s, e) => SetScale(2)) { Checked = _scale == 2 };
-            _scale3xItem = new MenuItem("3x (Large)", (s, e) => SetScale(3)) { Checked = _scale == 3 };
-            _scale4xItem = new MenuItem("4x (Extra Large)", (s, e) => SetScale(4)) { Checked = _scale == 4 };
-            MenuItem scaleMenu = new MenuItem("Kirby Size",
-                new[] { _scale1xItem, _scale2xItem, _scale3xItem, _scale4xItem });
-
-            string[] sleepLabels = new[]
-            {
-                "10 Seconds",
-                "30 Seconds",
-                "1 Minute",
-                "3 Minutes",
-                "5 Minutes (Default)",
-                "10 Minutes",
-                "Never"
-            };
-            _sleepTimeoutValues = SleepTimeoutValues;
-            _sleepMenuItems = new MenuItem[sleepLabels.Length];
-
-            for (int i = 0; i < sleepLabels.Length; i++) {
-                double val = _sleepTimeoutValues[i];
-                _sleepMenuItems[i] = new MenuItem(sleepLabels[i], (s, e) => SetSleepTimeout(val))
-                {
-                    Checked = _idleSleepSeconds == val
-                };
-            }
-
-            MenuItem sleepMenu = new MenuItem("Sleep Timer", _sleepMenuItems);
-
-            ContextMenu menu = new ContextMenu(new[]
-            {
-                new MenuItem("Kirby Taskbar Buddy") { Enabled = false },
-                new MenuItem("-"),
-                _overlayItem,
-                _combatItem,
-                scaleMenu,
-                sleepMenu,
-                _pauseItem,
-                _startupItem,
-                new MenuItem("-"),
-                new MenuItem("Exit", OnExit)
-            });
-
-            _trayIcon = new NotifyIcon
-            {
-                Icon = _loadedTrayIcon ?? SystemIcons.Application,
-                Text = "Kirby Taskbar Buddy",
-                ContextMenu = menu,
-                Visible = true
-            };
-
-            Screen primaryScreen = Screen.PrimaryScreen;
-            _cachedWorkArea = primaryScreen != null ? primaryScreen.WorkingArea : new Rectangle(0, 0, 1920, 1080);
-
-            _stage = new OverlayStage(_scale);
+            _envMonitor = new DesktopEnvironmentMonitor();
+            _stage = new OverlayStage(_settings.Scale);
 
             _stopwatch = Stopwatch.StartNew();
             _lastTickMs = _stopwatch.ElapsedMilliseconds;
-            _lastInputMs = _lastTickMs;
-            _lastMousePos = Cursor.Position;
-            NativeMethods.LASTINPUTINFO initLii = new NativeMethods.LASTINPUTINFO
-            {
-                cbSize = (uint)Marshal.SizeOf(typeof(NativeMethods.LASTINPUTINFO))
-            };
-
-            if (NativeMethods.GetLastInputInfo(ref initLii)) {
-                _lastSysInputTick = initLii.dwTime;
-            }
+            _idleMonitor = new IdleActivityMonitor(_lastTickMs, Cursor.Position);
 
             _animTimer = new Timer { Interval = 16 };
             _animTimer.Tick += OnTick;
             _animTimer.Start();
 
-            _proc = HookCallback;
-            _hookID = NativeMethods.SetWindowsHookEx(NativeMethods.WH_KEYBOARD_LL, _proc, NativeMethods.GetModuleHandle(null),
-                0);
+            _keyboardHook = new GlobalKeyboardHook(OnGlobalKeyDown);
 
             Diagnostics.TrimMemory();
         }
@@ -225,202 +117,40 @@ namespace KirbyTaskbarBuddy {
         /// </summary>
         public void RequestCleanExit() {
             if (_stage != null) {
-                _stage.BeginInvokeOnUiThread(() => OnExit(null, EventArgs.Empty));
-            }
-        }
-
-        /// <summary>
-        /// Clamps a candidate scale factor to the supported <c>1..4</c> range, falling back to <c>2</c> (Default).
-        /// </summary>
-        internal static int NormalizeScale(int scale) {
-            return scale >= 1 && scale <= 4 ? scale : 2;
-        }
-
-        /// <summary>
-        /// Validates a candidate sleep timeout against <see cref="SleepTimeoutValues"/>, falling back to <c>300.0</c> (5 Minutes).
-        /// </summary>
-        internal static double NormalizeSleepTimeout(double seconds) {
-            for (int i = 0; i < SleepTimeoutValues.Length; i++) {
-                if (SleepTimeoutValues[i] == seconds) {
-                    return seconds;
-                }
-            }
-
-            return 300.0;
-        }
-
-        /// <summary>
-        /// Safely parses a registry value (<c>REG_DWORD</c>, <c>REG_QWORD</c>, or <c>REG_SZ</c>) as a 32-bit integer
-        /// without throwing exceptions on missing or corrupted data.
-        /// </summary>
-        internal static bool TryParseRegistryInt(object rawValue, out int result) {
-            result = 0;
-
-            if (rawValue == null) {
-                return false;
-            }
-
-            if (rawValue is int) {
-                result = (int)rawValue;
-                return true;
-            }
-
-            if (rawValue is long) {
-                long longVal = (long)rawValue;
-
-                if (longVal >= int.MinValue && longVal <= int.MaxValue) {
-                    result = (int)longVal;
-                    return true;
-                }
-
-                return false;
-            }
-
-            string strVal = rawValue as string;
-
-            if (strVal != null) {
-                return int.TryParse(strVal, NumberStyles.Integer, CultureInfo.InvariantCulture, out result);
-            }
-
-            return false;
-        }
-
-        /// <summary>
-        /// Safely parses a registry value (<c>REG_DWORD</c>, <c>REG_QWORD</c>, or <c>REG_SZ</c>) as a double
-        /// without throwing exceptions on missing or corrupted data.
-        /// </summary>
-        internal static bool TryParseRegistryDouble(object rawValue, out double result) {
-            result = 0.0;
-
-            if (rawValue == null) {
-                return false;
-            }
-
-            if (rawValue is int) {
-                result = (int)rawValue;
-                return true;
-            }
-
-            if (rawValue is long) {
-                result = (long)rawValue;
-                return true;
-            }
-
-            if (rawValue is double) {
-                result = (double)rawValue;
-                return true;
-            }
-
-            string strVal = rawValue as string;
-
-            if (strVal != null) {
-                return double.TryParse(strVal, NumberStyles.Float | NumberStyles.AllowThousands,
-                    CultureInfo.InvariantCulture, out result);
-            }
-
-            return false;
-        }
-
-        private void LoadSettings() {
-            try {
-                using (RegistryKey key = Registry.CurrentUser.OpenSubKey(SETTINGS_REG_KEY, false)) {
-                    if (key != null) {
-                        int parsedScale;
-
-                        if (TryParseRegistryInt(key.GetValue(REG_VAL_SCALE), out parsedScale)) {
-                            _scale = NormalizeScale(parsedScale);
-                        }
-
-                        double parsedSleep;
-
-                        if (TryParseRegistryDouble(key.GetValue(REG_VAL_SLEEP_SECONDS), out parsedSleep)) {
-                            _idleSleepSeconds = NormalizeSleepTimeout(parsedSleep);
-                        }
-
-                        int parsedCombat;
-
-                        if (TryParseRegistryInt(key.GetValue(REG_VAL_COMBAT), out parsedCombat)) {
-                            _combatEnabled = parsedCombat != 0;
-                        }
-                    }
-                }
-            }
-            catch (SecurityException ex) {
-                Diagnostics.LogWarning("KirbyTaskbarBuddyContext.LoadSettings", ex);
-            }
-            catch (UnauthorizedAccessException ex) {
-                Diagnostics.LogWarning("KirbyTaskbarBuddyContext.LoadSettings", ex);
-            }
-            catch (IOException ex) {
-                Diagnostics.LogWarning("KirbyTaskbarBuddyContext.LoadSettings", ex);
-            }
-            catch (ObjectDisposedException ex) {
-                Diagnostics.LogWarning("KirbyTaskbarBuddyContext.LoadSettings", ex);
-            }
-        }
-
-        private void SaveSettings() {
-            try {
-                using (RegistryKey key = Registry.CurrentUser.CreateSubKey(SETTINGS_REG_KEY)) {
-                    if (key != null) {
-                        key.SetValue(REG_VAL_SCALE, _scale, RegistryValueKind.DWord);
-                        key.SetValue(REG_VAL_SLEEP_SECONDS, (int)_idleSleepSeconds, RegistryValueKind.DWord);
-                        key.SetValue(REG_VAL_COMBAT, _combatEnabled ? 1 : 0, RegistryValueKind.DWord);
-                    }
-                }
-            }
-            catch (SecurityException ex) {
-                Diagnostics.LogWarning("KirbyTaskbarBuddyContext.SaveSettings", ex);
-            }
-            catch (UnauthorizedAccessException ex) {
-                Diagnostics.LogWarning("KirbyTaskbarBuddyContext.SaveSettings", ex);
-            }
-            catch (IOException ex) {
-                Diagnostics.LogWarning("KirbyTaskbarBuddyContext.SaveSettings", ex);
-            }
-            catch (ObjectDisposedException ex) {
-                Diagnostics.LogWarning("KirbyTaskbarBuddyContext.SaveSettings", ex);
+                _stage.BeginInvokeOnUiThread(OnExit);
             }
         }
 
         private void SetScale(int newScale) {
-            newScale = NormalizeScale(newScale);
+            newScale = AppSettings.NormalizeScale(newScale);
 
-            if (_scale == newScale) {
+            if (_settings.Scale == newScale) {
                 return;
             }
 
-            _scale = newScale;
-            _scale1xItem.Checked = _scale == 1;
-            _scale2xItem.Checked = _scale == 2;
-            _scale3xItem.Checked = _scale == 3;
-            _scale4xItem.Checked = _scale == 4;
-            SaveSettings();
+            _settings.Scale = newScale;
+            _trayMenu.SyncState(_settings, RegistrySettingsService.IsStartupEnabled());
+            RegistrySettingsService.SaveSettings(_settings);
             Diagnostics.TrimMemory();
         }
 
         private void SetSleepTimeout(double seconds) {
-            _idleSleepSeconds = NormalizeSleepTimeout(seconds);
+            _settings.IdleSleepSeconds = AppSettings.NormalizeSleepTimeout(seconds);
+            _trayMenu.SyncState(_settings, RegistrySettingsService.IsStartupEnabled());
 
-            if (_sleepMenuItems != null && _sleepTimeoutValues != null) {
-                for (int i = 0; i < _sleepMenuItems.Length; i++) {
-                    _sleepMenuItems[i].Checked = _sleepTimeoutValues[i] == _idleSleepSeconds;
-                }
-            }
-
-            if (_idleSleepSeconds < 0) {
+            if (_settings.IdleSleepSeconds < 0) {
                 WakeFromSleep(ref _sleepState, ref _sleepAnimTime);
             }
 
-            SaveSettings();
+            RegistrySettingsService.SaveSettings(_settings);
         }
 
         /// <summary>
         /// Resets the idle timer on keyboard/mouse activity and transitions Kirby out of sleep if napping.
         /// </summary>
         private void NotifyUserActivity() {
-            if (_stopwatch != null) {
-                _lastInputMs = _stopwatch.ElapsedMilliseconds;
+            if (_stopwatch != null && _idleMonitor != null) {
+                _idleMonitor.RecordActivity(_stopwatch.ElapsedMilliseconds);
             }
 
             WakeFromSleep(ref _sleepState, ref _sleepAnimTime);
@@ -915,7 +645,7 @@ namespace KirbyTaskbarBuddy {
         private void StepHitEnemyOnContact(double delta60, Rectangle workArea) {
             _enemyAnimTime = 0.0;
 
-            if (StepHitEnemyPhysics(ref _enemyX, ref _enemyHitAnimTime, _activeEnemy, delta60, _scale)) {
+            if (StepHitEnemyPhysics(ref _enemyX, ref _enemyHitAnimTime, _activeEnemy, delta60, _settings.Scale)) {
                 RenderActiveEnemy(workArea, true);
             }
         }
@@ -930,32 +660,14 @@ namespace KirbyTaskbarBuddy {
             _lastTickMs = nowMs;
 
             Point mouse = Cursor.Position;
-            bool hasInput = false;
 
-            if (mouse.X != _lastMousePos.X || mouse.Y != _lastMousePos.Y) {
-                _lastMousePos = mouse;
-                hasInput = true;
-            }
-
-            NativeMethods.LASTINPUTINFO lii = new NativeMethods.LASTINPUTINFO
-            {
-                cbSize = (uint)Marshal.SizeOf(typeof(NativeMethods.LASTINPUTINFO))
-            };
-
-            if (NativeMethods.GetLastInputInfo(ref lii) && lii.dwTime != _lastSysInputTick) {
-                _lastSysInputTick = lii.dwTime;
-                hasInput = true;
-            }
-
-            if (hasInput) {
+            if (_idleMonitor.PollActivity(mouse)) {
                 NotifyUserActivity();
             }
-            else if (_idleSleepSeconds > 0 && _sleepState == SleepState.Awake && !_isJumping &&
+            else if (_settings.IdleSleepSeconds > 0 && _sleepState == SleepState.Awake && !_isJumping &&
                      _swallowState == SwallowState.None && !_isHit && _sleepFrames != null &&
                      _sleepFrames.Length >= 8) {
-                double idleSeconds = (nowMs - _lastInputMs) / 1000.0;
-
-                if (idleSeconds >= _idleSleepSeconds) {
+                if (_idleMonitor.GetIdleSeconds(nowMs) >= _settings.IdleSleepSeconds) {
                     bool hasStandFrames = _currentForm != null && _currentForm.Stand != null &&
                                           _currentForm.Stand.HasFrames(2);
                     _sleepState = hasStandFrames ? SleepState.Halting : SleepState.FallingAsleep;
@@ -963,40 +675,24 @@ namespace KirbyTaskbarBuddy {
                 }
             }
 
-            // Refresh primary monitor working area and fullscreen detection every 15 ticks (~240ms).
-            _envCheckCounter++;
-
-            if (_envCheckCounter >= 15) {
-                _envCheckCounter = 0;
-                Screen primaryScreen = Screen.PrimaryScreen;
-
-                if (primaryScreen != null) {
-                    _cachedWorkArea = primaryScreen.WorkingArea;
-                }
-
-                IntPtr fg = NativeMethods.GetForegroundWindow();
-                _isFullscreenCached = IsFullscreenAppActive(fg, _cachedWorkArea);
-
-                if (fg != _lastForegroundWindow) {
-                    _lastForegroundWindow = fg;
-
-                    if (_overlayEnabled && !_isFullscreenCached && _stage != null) {
-                        _stage.RefreshTopmostOrder();
-                    }
-                }
+            if (_envMonitor.StepTick(_stage) && _settings.OverlayEnabled && !_envMonitor.IsFullscreenCached &&
+                _stage != null) {
+                _stage.RefreshTopmostOrder();
             }
 
             if (_stage == null) {
                 return;
             }
 
-            if (!_overlayEnabled || _isFullscreenCached) {
-                _stage.ClearAll(_scale);
+            int scale = _settings.Scale;
+
+            if (!_settings.OverlayEnabled || _envMonitor.IsFullscreenCached) {
+                _stage.ClearAll(scale);
                 return;
             }
 
-            Rectangle workArea = _cachedWorkArea;
-            int halfWidth = CanvasConstants.TILE_SIZE / 2 * _scale;
+            Rectangle workArea = _envMonitor.CachedWorkArea;
+            int halfWidth = CanvasConstants.TILE_SIZE / 2 * scale;
             double delta60 = dtSeconds * 60.0;
 
             UpdateEnemy(dtSeconds, delta60, workArea, halfWidth);
@@ -1011,14 +707,14 @@ namespace KirbyTaskbarBuddy {
                 }
 
                 // Check if mouse pointer is close to Kirby's body on the taskbar (only guards when on the ground).
-                bool isMouseNear = IsMouseNearKirby(mouse, _kirbyX, workArea.Bottom, _scale, _isJumping);
+                bool isMouseNear = IsMouseNearKirby(mouse, _kirbyX, workArea.Bottom, scale, _isJumping);
                 bool isGuarding = !_isJumping && isMouseNear && _currentForm.Guard != null &&
                                   _currentForm.Guard.HasFrames();
 
-                if (_combatEnabled &&
+                if (_settings.CombatEnabled &&
                     TryTriggerEnemyHit(_forms, ref _currentForm, _sleepState, _isJumping, _swallowState, ref _isHit,
                         ref _hitAnimTime, ref _activeEnemy, ref _isEnemyHit, ref _enemyHitAnimTime, _kirbyX, _enemyX,
-                        _scale, isGuarding)) {
+                        scale, isGuarding)) {
                     _animTime = 0.0;
                     StepHitEnemyOnContact(delta60, workArea);
                 }
@@ -1026,14 +722,14 @@ namespace KirbyTaskbarBuddy {
                 if (_isHit) {
                     _activeVfx = null;
                     frameToRender = AdvanceHitState(ref _isHit, ref _hitAnimTime, ref _kirbyX, delta60, _currentForm,
-                        _scale);
+                        scale);
                 }
 
                 bool startedInhaleThisTick = false;
 
                 if (!_isHit && _swallowState == SwallowState.None &&
                     CanStartInhale(_currentForm, _sleepState, _isJumping, _swallowState, _activeEnemy, _kirbyX, _enemyX,
-                        _scale, isGuarding, _isEnemyHit)) {
+                        scale, isGuarding, _isEnemyHit)) {
                     _swallowState = SwallowState.Inhaling;
                     _swallowAnimTime = 0.0;
                     _inhaleVfx.Reset();
@@ -1042,7 +738,7 @@ namespace KirbyTaskbarBuddy {
                 }
 
                 if (!_isHit && _swallowState == SwallowState.Inhaling) {
-                    if (!_combatEnabled || _activeEnemy == null || _isEnemyHit || _enemyX < _kirbyX ||
+                    if (!_settings.CombatEnabled || _activeEnemy == null || _isEnemyHit || _enemyX < _kirbyX ||
                         _currentForm.Inhale == null || !_currentForm.Inhale.HasFrames()) {
                         _swallowState = SwallowState.None;
                         _swallowAnimTime = 0.0;
@@ -1078,10 +774,10 @@ namespace KirbyTaskbarBuddy {
                     AnimClip activeClip = useJump ? _currentForm.Jump : useGuard ? _currentForm.Guard : _currentForm.Walk;
 
                     if (_isJumping) {
-                        StepJumpPhysics(ref _isJumping, ref _kirbyX, ref _jumpY, ref _jumpVelY, delta60, _scale);
+                        StepJumpPhysics(ref _isJumping, ref _kirbyX, ref _jumpY, ref _jumpVelY, delta60, scale);
                     }
                     else if (!isMouseNear) {
-                        _kirbyX += WALK_SPEED * _scale * delta60;
+                        _kirbyX += WALK_SPEED * scale * delta60;
                         _animTime += activeClip.Speed * delta60;
                     }
                     else {
@@ -1094,14 +790,14 @@ namespace KirbyTaskbarBuddy {
                         _kirbyX = workArea.Left - halfWidth;
                     }
 
-                    if (_combatEnabled &&
+                    if (_settings.CombatEnabled &&
                         TryTriggerEnemyHit(_forms, ref _currentForm, _sleepState, _isJumping, _swallowState,
                             ref _isHit, ref _hitAnimTime, ref _activeEnemy, ref _isEnemyHit, ref _enemyHitAnimTime,
-                            _kirbyX, _enemyX, _scale, useGuard)) {
+                            _kirbyX, _enemyX, scale, useGuard)) {
                         _animTime = 0.0;
                         StepHitEnemyOnContact(delta60, workArea);
                         frameToRender = AdvanceHitState(ref _isHit, ref _hitAnimTime, ref _kirbyX, delta60,
-                            _currentForm, _scale);
+                            _currentForm, scale);
                     }
                     else if (useJump) {
                         frameToRender = activeClip.Frames[GetJumpFrameIndex(_jumpVelY)];
@@ -1119,15 +815,15 @@ namespace KirbyTaskbarBuddy {
                 return;
             }
 
-            _stage.KirbyLayer.RenderAtTaskbar(frameToRender, _scale, workArea, _kirbyX, _jumpY);
-            UpdateVfx(workArea);
+            _stage.KirbyLayer.RenderAtTaskbar(frameToRender, scale, workArea, _kirbyX, _jumpY);
+            UpdateVfx(workArea, scale);
         }
 
         /// <summary>
         /// Renders the currently active visual effect (<see cref="_activeVfx"/>, such as Kirby's inhale wind
         /// or copy ability attack particles) onto <see cref="OverlayStage.VfxLayer"/>, or clears the layer when inactive.
         /// </summary>
-        private void UpdateVfx(Rectangle workArea) {
+        private void UpdateVfx(Rectangle workArea, int scale) {
             if (_stage == null || _stage.VfxLayer == null) {
                 return;
             }
@@ -1135,12 +831,12 @@ namespace KirbyTaskbarBuddy {
             SpriteTile vfxTile = _activeVfx != null ? _activeVfx.Render() : null;
 
             if (vfxTile == null) {
-                _stage.VfxLayer.ClearOverlay(_scale);
+                _stage.VfxLayer.ClearOverlay(scale);
                 return;
             }
 
-            double vfxWorldX = _kirbyX + _activeVfx.OffsetX * _scale;
-            _stage.VfxLayer.RenderAtTaskbar(vfxTile, _scale, workArea, vfxWorldX, _activeVfx.OffsetY);
+            double vfxWorldX = _kirbyX + _activeVfx.OffsetX * scale;
+            _stage.VfxLayer.RenderAtTaskbar(vfxTile, scale, workArea, vfxWorldX, _activeVfx.OffsetY);
         }
 
         /// <summary>
@@ -1152,8 +848,10 @@ namespace KirbyTaskbarBuddy {
                 return;
             }
 
-            if (!_combatEnabled || _enemies.Count == 0) {
-                _stage.EnemyLayer.ClearOverlay(_scale);
+            int scale = _settings.Scale;
+
+            if (!_settings.CombatEnabled || _enemies.Count == 0) {
+                _stage.EnemyLayer.ClearOverlay(scale);
                 return;
             }
 
@@ -1175,10 +873,10 @@ namespace KirbyTaskbarBuddy {
             int despawnLeftX = workArea.Left - halfWidth;
             bool isBeingInhaled = _swallowState == SwallowState.Inhaling;
             bool remainActive = _isEnemyHit
-                ? StepHitEnemyPhysics(ref _enemyX, ref _enemyHitAnimTime, _activeEnemy, delta60, _scale)
+                ? StepHitEnemyPhysics(ref _enemyX, ref _enemyHitAnimTime, _activeEnemy, delta60, scale)
                 : isBeingInhaled
-                    ? StepInhaledEnemyPhysics(ref _enemyX, ref _enemyAnimTime, _activeEnemy, _kirbyX, delta60, _scale)
-                    : StepEnemyPhysics(ref _enemyX, ref _enemyAnimTime, _activeEnemy, delta60, _scale, despawnLeftX);
+                    ? StepInhaledEnemyPhysics(ref _enemyX, ref _enemyAnimTime, _activeEnemy, _kirbyX, delta60, scale)
+                    : StepEnemyPhysics(ref _enemyX, ref _enemyAnimTime, _activeEnemy, delta60, scale, despawnLeftX);
 
             if (!remainActive) {
                 if (isBeingInhaled && !_isEnemyHit) {
@@ -1191,7 +889,7 @@ namespace KirbyTaskbarBuddy {
                 _activeEnemy = null;
                 _isEnemyHit = false;
                 _enemyHitAnimTime = 0.0;
-                _stage.EnemyLayer.ClearOverlay(_scale);
+                _stage.EnemyLayer.ClearOverlay(scale);
 
                 _enemySpawnTimerSeconds = NextEnemySpawnInterval(_rng, ENEMY_SPAWN_MIN_SECONDS, ENEMY_SPAWN_MAX_SECONDS);
                 return;
@@ -1210,91 +908,7 @@ namespace KirbyTaskbarBuddy {
                 : _activeEnemy.Walk;
             SpriteTile enemyTile = AnimClip.GetFrame(enemyClip, _enemyAnimTime);
 
-            _stage.EnemyLayer.RenderAtTaskbar(enemyTile, _scale, workArea, _enemyX, 0.0);
-        }
-
-        /// <summary>
-        /// Returns <c>true</c> if <paramref name="className"/> belongs to the Windows desktop shell, taskbar,
-        /// Start menu, Alt+Tab switcher, or XAML system island rather than a fullscreen user application.
-        /// </summary>
-        internal static bool IsShellOrOverlayWindowClass(string className) {
-            if (string.IsNullOrEmpty(className)) {
-                return false;
-            }
-
-            return className == "Progman"
-                   || className == "WorkerW"
-                   || className == "Shell_TrayWnd"
-                   || className == "Shell_SecondaryTrayWnd"
-                   || className == "Windows.UI.Core.CoreWindow"
-                   || className == "XamlExplorerHostIslandWindow"
-                   || className == "MultitaskingViewFrame"
-                   || className == "ForegroundStaging";
-        }
-
-        /// <summary>
-        /// Returns <c>true</c> if the window extended style bits (<c>GWL_EXSTYLE</c>) indicate a non-activating,
-        /// click-through, or floating tool overlay rather than a standard fullscreen application window.
-        /// </summary>
-        internal static bool IsNonFullscreenOverlayExStyle(int exStyle) {
-            const int ignoreMask = NativeMethods.WS_EX_TRANSPARENT
-                                   | NativeMethods.WS_EX_NOACTIVATE
-                                   | NativeMethods.WS_EX_TOOLWINDOW;
-            return (exStyle & ignoreMask) != 0;
-        }
-
-        /// <summary>
-        /// Checks whether the foreground window covers the entire primary monitor (including the taskbar area)
-        /// while ignoring non-visible/minimized windows, transparent/tool overlays, and Windows shell classes.
-        /// </summary>
-        private bool IsFullscreenAppActive(IntPtr fg, Rectangle work) {
-            if (fg == IntPtr.Zero) {
-                return false;
-            }
-
-            if (_stage != null && _stage.OwnsWindowHandle(fg)) {
-                return false;
-            }
-
-            if (!NativeMethods.IsWindowVisible(fg) || NativeMethods.IsIconic(fg)) {
-                return false;
-            }
-
-            int exStyle = NativeMethods.GetWindowLong(fg, NativeMethods.GWL_EXSTYLE);
-
-            if (IsNonFullscreenOverlayExStyle(exStyle)) {
-                return false;
-            }
-
-            _classNameSb.Length = 0;
-
-            if (NativeMethods.GetClassName(fg, _classNameSb, _classNameSb.Capacity) > 0) {
-                string cls = _classNameSb.ToString();
-
-                if (IsShellOrOverlayWindowClass(cls)) {
-                    return false;
-                }
-            }
-
-            NativeMethods.RECT rect;
-
-            if (NativeMethods.GetWindowRect(fg, out rect)) {
-                Screen primaryScreen = Screen.PrimaryScreen;
-
-                if (primaryScreen == null) {
-                    return false;
-                }
-
-                Rectangle screen = primaryScreen.Bounds;
-
-                if (rect.Left <= screen.Left && rect.Top <= screen.Top &&
-                    rect.Right >= screen.Right && rect.Bottom >= screen.Bottom &&
-                    rect.Bottom > work.Bottom) {
-                    return true;
-                }
-            }
-
-            return false;
+            _stage.EnemyLayer.RenderAtTaskbar(enemyTile, _settings.Scale, workArea, _enemyX, 0.0);
         }
 
         /// <summary>
@@ -1323,16 +937,28 @@ namespace KirbyTaskbarBuddy {
             }
         }
 
-        private void OnToggleOverlay(object sender, EventArgs e) {
-            _overlayEnabled = !_overlayEnabled;
-            _overlayItem.Checked = _overlayEnabled;
+        private void OnGlobalKeyDown(int vkCode, bool isInitialKeyDown) {
+            bool wasSleeping = _sleepState != SleepState.Awake;
+            NotifyUserActivity();
+
+            if (isInitialKeyDown && !_settings.IsPaused && !wasSleeping) {
+                string keyName = KeyBindings.VkCodeToName(vkCode);
+
+                if (keyName != null) {
+                    HandleKeySwitch(keyName);
+                }
+            }
         }
 
-        private void OnToggleCombat(object sender, EventArgs e) {
-            _combatEnabled = !_combatEnabled;
-            _combatItem.Checked = _combatEnabled;
+        private void OnToggleOverlay() {
+            _settings.OverlayEnabled = !_settings.OverlayEnabled;
+            _trayMenu.SyncState(_settings, RegistrySettingsService.IsStartupEnabled());
+        }
 
-            if (!_combatEnabled) {
+        private void OnToggleCombat() {
+            _settings.CombatEnabled = !_settings.CombatEnabled;
+
+            if (!_settings.CombatEnabled) {
                 _activeEnemy = null;
                 _swallowedEnemy = null;
                 _isEnemyHit = false;
@@ -1345,136 +971,50 @@ namespace KirbyTaskbarBuddy {
 
                 if (_stage != null) {
                     if (_stage.EnemyLayer != null) {
-                        _stage.EnemyLayer.ClearOverlay(_scale);
+                        _stage.EnemyLayer.ClearOverlay(_settings.Scale);
                     }
 
                     if (_stage.VfxLayer != null) {
-                        _stage.VfxLayer.ClearOverlay(_scale);
+                        _stage.VfxLayer.ClearOverlay(_settings.Scale);
                     }
                 }
 
                 _enemySpawnTimerSeconds = NextEnemySpawnInterval(_rng, ENEMY_SPAWN_MIN_SECONDS, ENEMY_SPAWN_MAX_SECONDS);
             }
 
-            SaveSettings();
+            _trayMenu.SyncState(_settings, RegistrySettingsService.IsStartupEnabled());
+            RegistrySettingsService.SaveSettings(_settings);
         }
 
-        private void OnTogglePause(object sender, EventArgs e) {
-            _isPaused = !_isPaused;
-            _pauseItem.Checked = _isPaused;
-            _trayIcon.Text = _isPaused ? "Kirby Taskbar Buddy (Paused)" : "Kirby Taskbar Buddy";
+        private void OnTogglePause() {
+            _settings.IsPaused = !_settings.IsPaused;
+            _trayMenu.SyncState(_settings, RegistrySettingsService.IsStartupEnabled());
         }
 
-        private bool IsStartupEnabled() {
-            try {
-                using (RegistryKey key = Registry.CurrentUser.OpenSubKey(RUN_REG_KEY, false)) {
-                    return key != null && (key.GetValue(APP_NAME) != null || key.GetValue(LEGACY_APP_NAME) != null);
-                }
-            }
-            catch (SecurityException ex) {
-                Diagnostics.LogWarning("KirbyTaskbarBuddyContext.IsStartupEnabled", ex);
-                return false;
-            }
-            catch (UnauthorizedAccessException ex) {
-                Diagnostics.LogWarning("KirbyTaskbarBuddyContext.IsStartupEnabled", ex);
-                return false;
-            }
-            catch (IOException ex) {
-                Diagnostics.LogWarning("KirbyTaskbarBuddyContext.IsStartupEnabled", ex);
-                return false;
-            }
-            catch (ObjectDisposedException ex) {
-                Diagnostics.LogWarning("KirbyTaskbarBuddyContext.IsStartupEnabled", ex);
-                return false;
-            }
+        private void OnToggleStartup() {
+            bool nextState = !RegistrySettingsService.IsStartupEnabled();
+            RegistrySettingsService.SetStartup(nextState);
+            _trayMenu.SyncState(_settings, RegistrySettingsService.IsStartupEnabled());
         }
 
-        public static void SetStartup(bool enable) {
-            try {
-                using (RegistryKey key = Registry.CurrentUser.OpenSubKey(RUN_REG_KEY, true)) {
-                    if (key != null) {
-                        key.DeleteValue(LEGACY_APP_NAME, false);
-
-                        if (enable) {
-                            string exePath = Assembly.GetExecutingAssembly().Location;
-                            key.SetValue(APP_NAME, "\"" + exePath + "\"");
-                        }
-                        else {
-                            key.DeleteValue(APP_NAME, false);
-                        }
-                    }
-                }
+        private void OnExit() {
+            if (_animTimer != null) {
+                _animTimer.Stop();
             }
-            catch (SecurityException ex) {
-                Diagnostics.LogWarning("KirbyTaskbarBuddyContext.SetStartup", ex);
-            }
-            catch (UnauthorizedAccessException ex) {
-                Diagnostics.LogWarning("KirbyTaskbarBuddyContext.SetStartup", ex);
-            }
-            catch (IOException ex) {
-                Diagnostics.LogWarning("KirbyTaskbarBuddyContext.SetStartup", ex);
-            }
-            catch (ObjectDisposedException ex) {
-                Diagnostics.LogWarning("KirbyTaskbarBuddyContext.SetStartup", ex);
-            }
-        }
-
-        private void OnToggleStartup(object sender, EventArgs e) {
-            bool nextState = !_startupItem.Checked;
-            SetStartup(nextState);
-            _startupItem.Checked = IsStartupEnabled();
-        }
-
-        private void OnExit(object sender, EventArgs e) {
-            _animTimer.Stop();
 
             if (_stage != null) {
                 _stage.Dispose();
             }
 
-            if (_hookID != IntPtr.Zero) {
-                NativeMethods.UnhookWindowsHookEx(_hookID);
-                _hookID = IntPtr.Zero;
+            if (_keyboardHook != null) {
+                _keyboardHook.Dispose();
             }
 
-            _trayIcon.Visible = false;
-
-            if (_trayIconHandle != IntPtr.Zero) {
-                NativeMethods.DestroyIcon(_trayIconHandle);
-                _trayIconHandle = IntPtr.Zero;
+            if (_trayMenu != null) {
+                _trayMenu.Dispose();
             }
 
             Application.Exit();
-        }
-
-        /// <summary>
-        /// Global low-level keyboard hook callback (<c>WH_KEYBOARD_LL</c>).
-        /// Wakes Kirby on any key press and switches abilities on initial key-down (ignoring key repeat
-        /// and ignoring ability switches on the keystroke that wakes Kirby from sleep).
-        /// </summary>
-        private static IntPtr HookCallback(int nCode, IntPtr wParam, IntPtr lParam) {
-            if (nCode >= 0 && _instance != null) {
-                int msg = wParam.ToInt32();
-                int vkCode = Marshal.ReadInt32(lParam);
-
-                if (msg == NativeMethods.WM_KEYDOWN || msg == NativeMethods.WM_SYSKEYDOWN) {
-                    bool wasSleeping = _instance._sleepState != SleepState.Awake;
-                    _instance.NotifyUserActivity();
-
-                    if (_downKeys.Add(vkCode) && !_instance._isPaused && !wasSleeping) {
-                        string keyName = KeyBindings.VkCodeToName(vkCode);
-
-                        if (keyName != null) {
-                            _instance.HandleKeySwitch(keyName);
-                        }
-                    }
-                }
-                else if (msg == NativeMethods.WM_KEYUP || msg == NativeMethods.WM_SYSKEYUP) {
-                    _downKeys.Remove(vkCode);
-                }
-            }
-
-            return NativeMethods.CallNextHookEx(_hookID, nCode, wParam, lParam);
         }
 
     }

@@ -113,7 +113,20 @@ Keep this file updated whenever files or classes are added, moved, or renamed.
 
 ---
 
-## 3. Building & Running Tests
+## 3. Test Suite Map (`tests/KirbyTaskbarBuddy.Tests/`)
+
+- [`tests/KirbyTaskbarBuddy.Tests/FormDefinitionsTests.cs`](tests/KirbyTaskbarBuddy.Tests/FormDefinitionsTests.cs) — Validates all 19 copy abilities, enemy definitions (`Waddle Dee`, `Waddle Doo`), and sprite rectangle builders (`Row`, `Strip`).
+- [`tests/KirbyTaskbarBuddy.Tests/SpritesheetIntegrityTests.cs`](tests/KirbyTaskbarBuddy.Tests/SpritesheetIntegrityTests.cs) — Verifies embedded PNG spritesheets load cleanly and every configured rectangle is within bounds and non-empty.
+- [`tests/KirbyTaskbarBuddy.Tests/SpriteLoaderAlignmentTests.cs`](tests/KirbyTaskbarBuddy.Tests/SpriteLoaderAlignmentTests.cs) — Tests `SpriteLoader` pivot anchoring (`BottomCenter`, `Center`, `Custom`), `ExtractComposedClip`, `ExtractMirrorGuardClip`, `ExtractSwallowClip`, and `CreateTrayIcon`.
+- [`tests/KirbyTaskbarBuddy.Tests/KeyMappingTests.cs`](tests/KirbyTaskbarBuddy.Tests/KeyMappingTests.cs) — Tests `KeyBindings.VkCodeToName` and `KeyBindings.ResolveNextForm` ability toggling.
+- [`tests/KirbyTaskbarBuddy.Tests/SleepControllerTests.cs`](tests/KirbyTaskbarBuddy.Tests/SleepControllerTests.cs) — Tests `SleepController` multi-stage sleep and wake-up transitions (`Halting` -> `FallingAsleep` -> `Sleeping` -> `WakingUp` -> `PostWakeStanding` -> `Awake`).
+- [`tests/KirbyTaskbarBuddy.Tests/JumpAndMovementPhysicsTests.cs`](tests/KirbyTaskbarBuddy.Tests/JumpAndMovementPhysicsTests.cs) — Tests `JumpPhysicsState` (`ClampDeltaTime`, `StepJumpPhysics`, `GetJumpFrameIndex`, `IsMouseNearKirby`) and `AnimClip` (`GetFrame`, `GetVfxFrame`).
+- [`tests/KirbyTaskbarBuddy.Tests/CombatAndEnemyTests.cs`](tests/KirbyTaskbarBuddy.Tests/CombatAndEnemyTests.cs) — Tests `EnemySpawner`, `EnemyActor`, `SwallowController`, `HitRecoilState`, and `InhaleParticleEffect`.
+- [`tests/KirbyTaskbarBuddy.Tests/SettingsAndEnvironmentTests.cs`](tests/KirbyTaskbarBuddy.Tests/SettingsAndEnvironmentTests.cs) — Tests `AppSettings`, `RegistrySettingsService`, `DesktopEnvironmentMonitor`, `GlobalKeyboardHook`, `IdleActivityMonitor`, `KirbyOverlayWindow`, and `OverlayStage`.
+
+---
+
+## 4. Building & Running Tests
 
 - **Build Test Project**:
   ```powershell

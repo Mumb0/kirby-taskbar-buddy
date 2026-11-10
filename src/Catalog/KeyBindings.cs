@@ -44,7 +44,7 @@ namespace KirbyTaskbarBuddy {
         /// Pressing the currently active copy ability's key a second time reverts Kirby to Normal form (<c>"0"</c>).
         /// </summary>
         public static FormDef ResolveNextForm(
-            Dictionary<string, FormDef> keyToForm,
+            IDictionary<string, FormDef> keyToForm,
             FormDef currentForm,
             string keyName) {
             if (keyToForm == null || keyName == null) {

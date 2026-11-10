@@ -116,13 +116,13 @@ namespace KirbyTaskbarBuddy {
         /// </summary>
         public static readonly Rectangle[] SwallowEffectRects = new[]
         {
-            R(4, 40, 31, 31),   // 0: StarLarge (31x31 starburst)
-            R(40, 48, 15, 15),  // 1: StarSmall (15x15 starburst)
-            R(4, 76, 16, 16),   // 2: PuffSolid (16x16 solid white puff cloud)
-            R(24, 76, 16, 16),  // 3: PuffBubbles (16x16 bubble cluster puff)
-            R(44, 76, 16, 16),  // 4: PuffSparkles (16x16 fine sparkle dots)
+            R(4, 40, 31, 31), // 0: StarLarge (31x31 starburst)
+            R(40, 48, 15, 15), // 1: StarSmall (15x15 starburst)
+            R(4, 76, 16, 16), // 2: PuffSolid (16x16 solid white puff cloud)
+            R(24, 76, 16, 16), // 3: PuffBubbles (16x16 bubble cluster puff)
+            R(44, 76, 16, 16), // 4: PuffSparkles (16x16 fine sparkle dots)
             R(44, 144, 16, 16), // 5: SparkleBurst (16x16 dense corner sparkle burst)
-            R(64, 144, 16, 16)  // 6: SparkleBurst2 (16x16 intermediate corner sparkle burst)
+            R(64, 144, 16, 16) // 6: SparkleBurst2 (16x16 intermediate corner sparkle burst)
         };
 
         private static SwallowParticleLayer P(int spriteIndex, int offsetX, int offsetY) {
@@ -141,9 +141,15 @@ namespace KirbyTaskbarBuddy {
             // #1:
             new[] { P(5, -11, -23), P(5, -3, -23), P(2, -11, -19), P(2, -3, -19), P(5, -11, -15), P(5, -3, -15) },
             // #2:
-            new[] { P(5, -13, -25), P(5, -1, -25), P(1, -25, -24), P(2, -13, -19), P(2, -1, -19), P(5, -13, -13), P(5, -1, -13) },
+            new[]
+            {
+                P(5, -13, -25), P(5, -1, -25), P(1, -25, -24), P(2, -13, -19), P(2, -1, -19), P(5, -13, -13), P(5, -1, -13)
+            },
             // #3:
-            new[] { P(5, -14, -26), P(5, 0, -26), P(0, -33, -32), P(2, -14, -19), P(2, 0, -19), P(5, -14, -12), P(5, 0, -12) },
+            new[]
+            {
+                P(5, -14, -26), P(5, 0, -26), P(0, -33, -32), P(2, -14, -19), P(2, 0, -19), P(5, -14, -12), P(5, 0, -12)
+            },
             // #4:
             new[] { P(6, -16, -28), P(6, 2, -28), P(2, -16, -19), P(2, 2, -19), P(6, -16, -10), P(6, 2, -10) },
             // #5:
@@ -157,9 +163,17 @@ namespace KirbyTaskbarBuddy {
             // #9:
             new[] { P(4, -24, -36), P(4, 10, -36), P(3, -23, -21), P(3, 9, -21), P(4, -24, -2), P(4, 10, -2) },
             // #10:
-            new[] { P(4, -25, -37), P(4, 11, -37), P(1, -4, -31), P(3, -23, -21), P(3, 9, -21), P(2, -9, -19), P(2, -5, -19), P(4, -25, -1), P(4, 11, -1) },
+            new[]
+            {
+                P(4, -25, -37), P(4, 11, -37), P(1, -4, -31), P(3, -23, -21), P(3, 9, -21), P(2, -9, -19), P(2, -5, -19),
+                P(4, -25, -1), P(4, 11, -1)
+            },
             // #11:
-            new[] { P(4, -26, -38), P(4, 12, -38), P(0, -12, -39), P(3, -24, -21), P(3, 10, -21), P(2, -11, -19), P(2, -3, -19), P(4, -26, 0), P(4, 12, 0) },
+            new[]
+            {
+                P(4, -26, -38), P(4, 12, -38), P(0, -12, -39), P(3, -24, -21), P(3, 10, -21), P(2, -11, -19), P(2, -3, -19),
+                P(4, -26, 0), P(4, 12, 0)
+            },
             // #12:
             new[] { P(3, -25, -22), P(3, 11, -22), P(2, -13, -19), P(2, -1, -19) },
             // #13:

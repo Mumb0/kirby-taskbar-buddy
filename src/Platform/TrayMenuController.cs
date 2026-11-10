@@ -24,11 +24,17 @@ namespace KirbyTaskbarBuddy {
         private IntPtr _trayIconHandle;
 
         public event Action OverlayToggled;
+
         public event Action CombatToggled;
+
         public event Action<int> ScaleSelected;
+
         public event Action<double> SleepTimeoutSelected;
+
         public event Action PauseToggled;
+
         public event Action StartupToggled;
+
         public event Action ExitRequested;
 
         public TrayMenuController(

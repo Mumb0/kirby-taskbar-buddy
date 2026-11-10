@@ -45,11 +45,33 @@ Keep this file updated whenever files or classes are added, moved, or renamed.
   - `EnemyDef` class (`Name`, `CopyAbility`, `WalkSpeed`, `Walk`, `Inhaled`, `WalkRects`, `InhaledRects`)
 - [`src/Catalog/FormDefinitions.cs`](src/Catalog/FormDefinitions.cs) — `FormDefinitions`:
   - `SleepState` and `SwallowState` enums
-  - Shared sprite rects & sequences: `NormalTrayIconRect`, `MirrorGuardBodyRect`, `MirrorGuardBubbleRect`, `SLEEP_PIVOT_X`, `SLEEP_PIVOT_Y`, `HaltStandSeq`, `FallAsleepSeq`, `SleepLoopSeq`, `WakeUpSeq`, `PostWakeStandSeq`, `SwallowEmptySeq`, `SwallowAbilitySeq`
+  - Shared sprite rects & sequences: `NormalTrayIconRect`, `MirrorGuardBodyRect`, `MirrorGuardBubbleRect`, `SLEEP_PIVOT_X`, `SLEEP_PIVOT_Y`, `HaltStandSeq`, `FallAsleepSeq`, `SleepLoopSeq`, `WakeUpSeq`, `PostWakeStandSeq`, `SwallowNoAbilitySeq`, `SwallowAbilitySeq`, `HitSeq`
   - Catalog builders & lookup helpers: `PopulateForms`, `PopulateEnemies`, `ResolveNormalForm`, `ResolveSwallowedForm`
 - [`src/Catalog/KeyBindings.cs`](src/Catalog/KeyBindings.cs) — `KeyBindings`:
   - `VkCodeToName(int vkCode)` — maps Win32 virtual-key codes (`0`–`9`, `Numpad0`–`Numpad9`, `A`–`Z`, Spacebar) to form key strings
   - `ResolveNextForm(IDictionary<string, FormDef> keyToForm, FormDef currentForm, string keyName)` — resolves next form or toggles back to Normal (`"0"`)
+
+### `src/Actors/` — Kirby, Enemies, Physics & Combat State Machines
+- [`src/Actors/JumpPhysicsState.cs`](src/Actors/JumpPhysicsState.cs) — `JumpPhysicsState` struct:
+  - Constants: `WALK_SPEED = 0.75`, `JUMP_INIT_VEL = 4.2`, `JUMP_GRAVITY = 0.18`
+  - State & methods: `IsJumping`, `JumpY`, `JumpVelY`, `StartJump()`, `Step`, `GetFrameIndex()`, `ClampDeltaTime`, `IsMouseNearKirby`, `StepJumpPhysics`, `GetJumpFrameIndex`
+- [`src/Actors/HitRecoilState.cs`](src/Actors/HitRecoilState.cs) — `HitRecoilState` struct:
+  - Constants: `ENEMY_CONTACT_DISTANCE = 16.0`, `HIT_PUSHBACK_FRAMES = 8`, `HIT_PUSHBACK_SPEED = 1.5`, `ENEMY_HIT_FRAMES = 24`
+  - State & methods: `IsHit`, `AnimTime`, `Reset()`, `AdvanceKirby`, `StepEnemy`, `CanTakeEnemyHit`, `TryTriggerEnemyHit`, `AdvanceHitState`, `StepHitEnemyPhysics`
+- [`src/Actors/SleepController.cs`](src/Actors/SleepController.cs) — `SleepController`:
+  - Multi-stage sleep state machine (`BeginSleep`, `Wake`, `Advance`, `WakeFromSleep`, `AdvanceSleepState`)
+- [`src/Actors/SwallowController.cs`](src/Actors/SwallowController.cs) — `SwallowController`:
+  - Constants: `INHALE_RANGE = 80.0`, `INHALE_PULL_SPEED = 2.0`, `INHALE_TOUCH_DISTANCE = 8.0`
+  - State & methods: `State`, `AnimTime`, `SwallowedEnemy`, `Reset()`, `BeginInhale()`, `BeginMouthful`, `Advance`, `CanStartInhale`, `AdvanceSwallowState`
+- [`src/Actors/EnemyActor.cs`](src/Actors/EnemyActor.cs) — `EnemyActor`:
+  - Active enemy state (`Def`, `X`, `AnimTime`, `HitRecoil`), `Spawn`, `Clear`, `Step`, `GetCurrentFrame`, `StepEnemyPhysics`, `StepInhaledEnemyPhysics`
+- [`src/Actors/EnemySpawner.cs`](src/Actors/EnemySpawner.cs) — `EnemySpawner`:
+  - Constants: `SPAWN_MIN_SECONDS = 5.0`, `SPAWN_MAX_SECONDS = 10.0`
+  - Manages random spawn timer and owns `EnemyActor` (`EnsureActiveOrTickTimer`, `ClearActiveEnemy`, `NextSpawnInterval`)
+- [`src/Actors/KirbyActor.cs`](src/Actors/KirbyActor.cs) — `KirbyActor`:
+  - Owns Kirby's position (`X`), `CurrentForm`, `AnimTime`, `Jump`, `HitRecoil`, `Sleep`, `Swallow`, `InhaleVfx`, `ActiveVfx`, `HandleKeySwitch`, `ResetCombatState`
+- [`src/Actors/TaskbarWorld.cs`](src/Actors/TaskbarWorld.cs) — `TaskbarWorld`:
+  - Scene coordinator updating `KirbyActor`, `EnemySpawner`, combat interactions, and rendering onto `OverlayStage` (`Tick`, `CheckIdleSleep`, `DisableCombat`)
 
 ### `src/Rendering/` — Spritesheet Slicing, Layered Windows & Visual Effects
 - [`src/Rendering/SpriteTile.cs`](src/Rendering/SpriteTile.cs) — `SpriteTile`:
@@ -87,7 +109,7 @@ Keep this file updated whenever files or classes are added, moved, or renamed.
 - [`src/Platform/TrayMenuController.cs`](src/Platform/TrayMenuController.cs) — `TrayMenuController : IDisposable`:
   - System tray `NotifyIcon` and `ContextMenu` builder, state synchronization (`SyncState`), and menu action events
 - [`src/Platform/KirbyTaskbarBuddyContext.cs`](src/Platform/KirbyTaskbarBuddyContext.cs) — `KirbyTaskbarBuddyContext : ApplicationContext`:
-  - Application orchestrator wiring `TrayMenuController`, `OverlayStage`, `GlobalKeyboardHook`, `IdleActivityMonitor`, `DesktopEnvironmentMonitor`, and the 60 Hz actor/combat state machines (actor extraction scheduled for Phase 4)
+  - Thin ~215-line application orchestrator wiring `TrayMenuController`, `OverlayStage`, `GlobalKeyboardHook`, `IdleActivityMonitor`, `DesktopEnvironmentMonitor`, and `TaskbarWorld`
 
 ---
 

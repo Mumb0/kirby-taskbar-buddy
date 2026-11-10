@@ -32,14 +32,17 @@ namespace KirbyTaskbarBuddy {
         private readonly Random _rng;
         private readonly InhaleParticle[] _particles = new InhaleParticle[PARTICLE_COUNT];
         private readonly int[] _scratch = new int[CanvasConstants.TILE_SIZE * CanvasConstants.TILE_SIZE];
+
         private readonly SpriteTile _tileA = new SpriteTile
         {
             PremulPixels = new int[CanvasConstants.TILE_SIZE * CanvasConstants.TILE_SIZE]
         };
+
         private readonly SpriteTile _tileB = new SpriteTile
         {
             PremulPixels = new int[CanvasConstants.TILE_SIZE * CanvasConstants.TILE_SIZE]
         };
+
         private bool _useTileB;
 
         public double OffsetX {

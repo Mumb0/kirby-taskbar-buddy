@@ -130,7 +130,7 @@ namespace KirbyTaskbarBuddy.Tests
             foreach (EnemyDef enemy in enemies)
             {
                 Assert.Equal("enemy-waddle-dee.png", enemy.FileName);
-                Assert.True(enemy.WalkSpeed > 0.0 && enemy.WalkSpeed < KirbyTaskbarBuddyContext.WALK_SPEED);
+                Assert.True(enemy.WalkSpeed > 0.0 && enemy.WalkSpeed < JumpPhysicsState.WALK_SPEED);
                 AssertClipDefinitionValid(enemy.Name, "Walk", enemy.Walk, minRects: 2);
                 Assert.Equal(2, enemy.Walk.SourceRects.Length);
                 AssertClipDefinitionValid(enemy.Name, "Inhaled", enemy.Inhaled, minRects: 1);

@@ -17,7 +17,7 @@ namespace KirbyTaskbarBuddy.Tests
             // Step through Halting until it transitions to FallingAsleep.
             for (int tick = 0; tick < 200 && state == SleepState.Halting; tick++)
             {
-                SpriteTile frame = KirbyTaskbarBuddyContext.AdvanceSleepState(ref state, ref animTime, 1.0, form, sleepFrames);
+                SpriteTile frame = SleepController.AdvanceSleepState(ref state, ref animTime, 1.0, form, sleepFrames);
                 Assert.NotNull(frame);
             }
             Assert.Equal(SleepState.FallingAsleep, state);
@@ -26,7 +26,7 @@ namespace KirbyTaskbarBuddy.Tests
             // Step through FallingAsleep until it transitions to Sleeping.
             for (int tick = 0; tick < 250 && state == SleepState.FallingAsleep; tick++)
             {
-                SpriteTile frame = KirbyTaskbarBuddyContext.AdvanceSleepState(ref state, ref animTime, 1.0, form, sleepFrames);
+                SpriteTile frame = SleepController.AdvanceSleepState(ref state, ref animTime, 1.0, form, sleepFrames);
                 Assert.NotNull(frame);
             }
             Assert.Equal(SleepState.Sleeping, state);
@@ -35,7 +35,7 @@ namespace KirbyTaskbarBuddy.Tests
             // Sleeping loops indefinitely across SleepLoopSeq frames [2, 3, 4, 5, 4, 3].
             for (int tick = 0; tick < 300; tick++)
             {
-                SpriteTile frame = KirbyTaskbarBuddyContext.AdvanceSleepState(ref state, ref animTime, 1.0, form, sleepFrames);
+                SpriteTile frame = SleepController.AdvanceSleepState(ref state, ref animTime, 1.0, form, sleepFrames);
                 Assert.Equal(SleepState.Sleeping, state);
                 Assert.NotNull(frame);
             }
@@ -53,7 +53,7 @@ namespace KirbyTaskbarBuddy.Tests
             // Step through WakingUp until it enters PostWakeStanding.
             for (int tick = 0; tick < 100 && state == SleepState.WakingUp; tick++)
             {
-                SpriteTile frame = KirbyTaskbarBuddyContext.AdvanceSleepState(ref state, ref animTime, 1.0, form, sleepFrames);
+                SpriteTile frame = SleepController.AdvanceSleepState(ref state, ref animTime, 1.0, form, sleepFrames);
                 Assert.NotNull(frame);
             }
             Assert.Equal(SleepState.PostWakeStanding, state);
@@ -63,7 +63,7 @@ namespace KirbyTaskbarBuddy.Tests
             SpriteTile lastFrame = null;
             for (int tick = 0; tick < 100 && state == SleepState.PostWakeStanding; tick++)
             {
-                lastFrame = KirbyTaskbarBuddyContext.AdvanceSleepState(ref state, ref animTime, 1.0, form, sleepFrames);
+                lastFrame = SleepController.AdvanceSleepState(ref state, ref animTime, 1.0, form, sleepFrames);
             }
             Assert.Equal(SleepState.Awake, state);
             Assert.Equal(0.0, animTime);
@@ -76,28 +76,28 @@ namespace KirbyTaskbarBuddy.Tests
             // 1. User activity during Halting (before sleep cap appears) returns directly to Awake.
             SleepState state = SleepState.Halting;
             double animTime = 2.5;
-            KirbyTaskbarBuddyContext.WakeFromSleep(ref state, ref animTime);
+            SleepController.WakeFromSleep(ref state, ref animTime);
             Assert.Equal(SleepState.Awake, state);
             Assert.Equal(0.0, animTime);
 
             // 2. User activity during FallingAsleep triggers startled WakingUp.
             state = SleepState.FallingAsleep;
             animTime = 3.0;
-            KirbyTaskbarBuddyContext.WakeFromSleep(ref state, ref animTime);
+            SleepController.WakeFromSleep(ref state, ref animTime);
             Assert.Equal(SleepState.WakingUp, state);
             Assert.Equal(0.0, animTime);
 
             // 3. User activity during Sleeping triggers startled WakingUp.
             state = SleepState.Sleeping;
             animTime = 12.0;
-            KirbyTaskbarBuddyContext.WakeFromSleep(ref state, ref animTime);
+            SleepController.WakeFromSleep(ref state, ref animTime);
             Assert.Equal(SleepState.WakingUp, state);
             Assert.Equal(0.0, animTime);
 
             // 4. Activity while already WakingUp or PostWakeStanding does not restart the wake animation.
             state = SleepState.WakingUp;
             animTime = 1.8;
-            KirbyTaskbarBuddyContext.WakeFromSleep(ref state, ref animTime);
+            SleepController.WakeFromSleep(ref state, ref animTime);
             Assert.Equal(SleepState.WakingUp, state);
             Assert.Equal(1.8, animTime);
         }
@@ -105,11 +105,11 @@ namespace KirbyTaskbarBuddy.Tests
         [Fact]
         public void ClampDeltaTime_PreventsTeleportOnZeroNegativeOrLargeSpikes()
         {
-            Assert.Equal(0.01667, KirbyTaskbarBuddyContext.ClampDeltaTime(0.0));
-            Assert.Equal(0.01667, KirbyTaskbarBuddyContext.ClampDeltaTime(-0.5));
-            Assert.Equal(0.01667, KirbyTaskbarBuddyContext.ClampDeltaTime(5.0));   // System resume spike
-            Assert.Equal(0.016, KirbyTaskbarBuddyContext.ClampDeltaTime(0.016));   // Normal 60Hz tick
-            Assert.Equal(0.25, KirbyTaskbarBuddyContext.ClampDeltaTime(0.25));     // Upper boundary
+            Assert.Equal(0.01667, JumpPhysicsState.ClampDeltaTime(0.0));
+            Assert.Equal(0.01667, JumpPhysicsState.ClampDeltaTime(-0.5));
+            Assert.Equal(0.01667, JumpPhysicsState.ClampDeltaTime(5.0));   // System resume spike
+            Assert.Equal(0.016, JumpPhysicsState.ClampDeltaTime(0.016));   // Normal 60Hz tick
+            Assert.Equal(0.25, JumpPhysicsState.ClampDeltaTime(0.25));     // Upper boundary
         }
 
         [Fact]
@@ -118,13 +118,13 @@ namespace KirbyTaskbarBuddy.Tests
             bool isJumping = true;
             double kirbyX = 100.0;
             double jumpY = 0.0;
-            double jumpVelY = KirbyTaskbarBuddyContext.JUMP_INIT_VEL;
+            double jumpVelY = JumpPhysicsState.JUMP_INIT_VEL;
             double maxJumpY = 0.0;
 
             int ticks = 0;
             while (isJumping && ticks < 200)
             {
-                KirbyTaskbarBuddyContext.StepJumpPhysics(ref isJumping, ref kirbyX, ref jumpY, ref jumpVelY, 1.0);
+                JumpPhysicsState.StepJumpPhysics(ref isJumping, ref kirbyX, ref jumpY, ref jumpVelY, 1.0);
                 if (jumpY > maxJumpY) maxJumpY = jumpY;
                 ticks++;
             }
@@ -133,34 +133,34 @@ namespace KirbyTaskbarBuddy.Tests
             Assert.Equal(0.0, jumpY);
             Assert.Equal(0.0, jumpVelY);
             Assert.True(maxJumpY > 45.0, "Jump apex should exceed 45 unscaled pixels");
-            Assert.Equal(100.0 + (KirbyTaskbarBuddyContext.WALK_SPEED * 2) * ticks, kirbyX, 5);
+            Assert.Equal(100.0 + (JumpPhysicsState.WALK_SPEED * 2) * ticks, kirbyX, 5);
 
             // At 1x scale, Kirby travels half the horizontal screen distance per tick as at 2x scale.
             bool isJumping1x = true;
             double kirbyX1x = 100.0;
             double jumpY1x = 0.0;
-            double jumpVelY1x = KirbyTaskbarBuddyContext.JUMP_INIT_VEL;
+            double jumpVelY1x = JumpPhysicsState.JUMP_INIT_VEL;
             for (int i = 0; i < ticks; i++)
             {
-                KirbyTaskbarBuddyContext.StepJumpPhysics(ref isJumping1x, ref kirbyX1x, ref jumpY1x, ref jumpVelY1x, 1.0, scale: 1);
+                JumpPhysicsState.StepJumpPhysics(ref isJumping1x, ref kirbyX1x, ref jumpY1x, ref jumpVelY1x, 1.0, scale: 1);
             }
             Assert.False(isJumping1x);
-            Assert.Equal(100.0 + (KirbyTaskbarBuddyContext.WALK_SPEED * 1) * ticks, kirbyX1x, 5);
+            Assert.Equal(100.0 + (JumpPhysicsState.WALK_SPEED * 1) * ticks, kirbyX1x, 5);
         }
 
         [Fact]
         public void GetJumpFrameIndex_MapsVelocityThresholdsToAllFiveSomersaultPhases()
         {
-            Assert.Equal(0, KirbyTaskbarBuddyContext.GetJumpFrameIndex(4.2));   // Rising launch (> 1.2)
-            Assert.Equal(0, KirbyTaskbarBuddyContext.GetJumpFrameIndex(1.21));
-            Assert.Equal(1, KirbyTaskbarBuddyContext.GetJumpFrameIndex(1.2));   // Apex somersault 1 (0.0 < v <= 1.2)
-            Assert.Equal(1, KirbyTaskbarBuddyContext.GetJumpFrameIndex(0.01));
-            Assert.Equal(2, KirbyTaskbarBuddyContext.GetJumpFrameIndex(0.0));   // Apex somersault 2 (-1.2 < v <= 0.0)
-            Assert.Equal(2, KirbyTaskbarBuddyContext.GetJumpFrameIndex(-1.19));
-            Assert.Equal(3, KirbyTaskbarBuddyContext.GetJumpFrameIndex(-1.2));  // Early fall recovery (-2.6 < v <= -1.2)
-            Assert.Equal(3, KirbyTaskbarBuddyContext.GetJumpFrameIndex(-2.59));
-            Assert.Equal(4, KirbyTaskbarBuddyContext.GetJumpFrameIndex(-2.6));  // Full fall descent (<= -2.6)
-            Assert.Equal(4, KirbyTaskbarBuddyContext.GetJumpFrameIndex(-4.2));
+            Assert.Equal(0, JumpPhysicsState.GetJumpFrameIndex(4.2));   // Rising launch (> 1.2)
+            Assert.Equal(0, JumpPhysicsState.GetJumpFrameIndex(1.21));
+            Assert.Equal(1, JumpPhysicsState.GetJumpFrameIndex(1.2));   // Apex somersault 1 (0.0 < v <= 1.2)
+            Assert.Equal(1, JumpPhysicsState.GetJumpFrameIndex(0.01));
+            Assert.Equal(2, JumpPhysicsState.GetJumpFrameIndex(0.0));   // Apex somersault 2 (-1.2 < v <= 0.0)
+            Assert.Equal(2, JumpPhysicsState.GetJumpFrameIndex(-1.19));
+            Assert.Equal(3, JumpPhysicsState.GetJumpFrameIndex(-1.2));  // Early fall recovery (-2.6 < v <= -1.2)
+            Assert.Equal(3, JumpPhysicsState.GetJumpFrameIndex(-2.59));
+            Assert.Equal(4, JumpPhysicsState.GetJumpFrameIndex(-2.6));  // Full fall descent (<= -2.6)
+            Assert.Equal(4, JumpPhysicsState.GetJumpFrameIndex(-4.2));
         }
 
         [Fact]
@@ -174,17 +174,17 @@ namespace KirbyTaskbarBuddy.Tests
             Point outsideX = new Point(525, 1016);
             Point outsideY = new Point(500, 991);
 
-            Assert.True(KirbyTaskbarBuddyContext.IsMouseNearKirby(nearPoint, kirbyX, workAreaBottom, scale, isJumping: false));
-            Assert.False(KirbyTaskbarBuddyContext.IsMouseNearKirby(outsideX, kirbyX, workAreaBottom, scale, isJumping: false));
-            Assert.False(KirbyTaskbarBuddyContext.IsMouseNearKirby(outsideY, kirbyX, workAreaBottom, scale, isJumping: false));
+            Assert.True(JumpPhysicsState.IsMouseNearKirby(nearPoint, kirbyX, workAreaBottom, scale, isJumping: false));
+            Assert.False(JumpPhysicsState.IsMouseNearKirby(outsideX, kirbyX, workAreaBottom, scale, isJumping: false));
+            Assert.False(JumpPhysicsState.IsMouseNearKirby(outsideY, kirbyX, workAreaBottom, scale, isJumping: false));
 
             // At scale=1, kirbyCenterY = 1040 - 12 = 1028; guard box is +/-12px horizontally and +/-12px vertically.
-            Assert.True(KirbyTaskbarBuddyContext.IsMouseNearKirby(new Point(512, 1016), kirbyX, workAreaBottom, scale: 1, isJumping: false));
-            Assert.False(KirbyTaskbarBuddyContext.IsMouseNearKirby(new Point(513, 1028), kirbyX, workAreaBottom, scale: 1, isJumping: false));
-            Assert.False(KirbyTaskbarBuddyContext.IsMouseNearKirby(new Point(500, 1015), kirbyX, workAreaBottom, scale: 1, isJumping: false));
+            Assert.True(JumpPhysicsState.IsMouseNearKirby(new Point(512, 1016), kirbyX, workAreaBottom, scale: 1, isJumping: false));
+            Assert.False(JumpPhysicsState.IsMouseNearKirby(new Point(513, 1028), kirbyX, workAreaBottom, scale: 1, isJumping: false));
+            Assert.False(JumpPhysicsState.IsMouseNearKirby(new Point(500, 1015), kirbyX, workAreaBottom, scale: 1, isJumping: false));
 
             // Never enters guard stance while jumping, even if cursor is directly over Kirby.
-            Assert.False(KirbyTaskbarBuddyContext.IsMouseNearKirby(new Point(500, 1016), kirbyX, workAreaBottom, scale, isJumping: true));
+            Assert.False(JumpPhysicsState.IsMouseNearKirby(new Point(500, 1016), kirbyX, workAreaBottom, scale, isJumping: true));
         }
 
         [Fact]
@@ -213,15 +213,15 @@ namespace KirbyTaskbarBuddy.Tests
             System.Random rng = new System.Random(12345);
             for (int i = 0; i < 100; i++)
             {
-                double delay = KirbyTaskbarBuddyContext.NextEnemySpawnInterval(
+                double delay = EnemySpawner.NextSpawnInterval(
                     rng,
-                    KirbyTaskbarBuddyContext.ENEMY_SPAWN_MIN_SECONDS,
-                    KirbyTaskbarBuddyContext.ENEMY_SPAWN_MAX_SECONDS);
-                Assert.InRange(delay, KirbyTaskbarBuddyContext.ENEMY_SPAWN_MIN_SECONDS, KirbyTaskbarBuddyContext.ENEMY_SPAWN_MAX_SECONDS);
+                    EnemySpawner.SPAWN_MIN_SECONDS,
+                    EnemySpawner.SPAWN_MAX_SECONDS);
+                Assert.InRange(delay, EnemySpawner.SPAWN_MIN_SECONDS, EnemySpawner.SPAWN_MAX_SECONDS);
             }
 
-            Assert.Equal(5.0, KirbyTaskbarBuddyContext.NextEnemySpawnInterval(null, 5.0, 600.0));
-            Assert.Equal(10.0, KirbyTaskbarBuddyContext.NextEnemySpawnInterval(rng, 10.0, 5.0));
+            Assert.Equal(5.0, EnemySpawner.NextSpawnInterval(null, 5.0, 600.0));
+            Assert.Equal(10.0, EnemySpawner.NextSpawnInterval(rng, 10.0, 5.0));
         }
 
         [Fact]
@@ -246,7 +246,7 @@ namespace KirbyTaskbarBuddy.Tests
             int despawnLeftX = -80;
 
             // Single 60Hz tick at 2x scale moves enemy left by 0.55 * 2 = 1.1px and advances animTime by 0.1.
-            bool active = KirbyTaskbarBuddyContext.StepEnemyPhysics(ref enemyX, ref animTime, enemy, 1.0, scale, despawnLeftX);
+            bool active = EnemyActor.StepEnemyPhysics(ref enemyX, ref animTime, enemy, 1.0, scale, despawnLeftX);
             Assert.True(active);
             Assert.Equal(98.9, enemyX, 5);
             Assert.Equal(0.1, animTime, 5);
@@ -255,7 +255,7 @@ namespace KirbyTaskbarBuddy.Tests
             int ticks = 0;
             while (active && ticks < 500)
             {
-                active = KirbyTaskbarBuddyContext.StepEnemyPhysics(ref enemyX, ref animTime, enemy, 1.0, scale, despawnLeftX);
+                active = EnemyActor.StepEnemyPhysics(ref enemyX, ref animTime, enemy, 1.0, scale, despawnLeftX);
                 ticks++;
             }
 
@@ -264,7 +264,7 @@ namespace KirbyTaskbarBuddy.Tests
             Assert.True(animTime > 15.0);
 
             // Null enemy or clip without frames immediately returns false.
-            Assert.False(KirbyTaskbarBuddyContext.StepEnemyPhysics(ref enemyX, ref animTime, null, 1.0, scale, despawnLeftX));
+            Assert.False(EnemyActor.StepEnemyPhysics(ref enemyX, ref animTime, null, 1.0, scale, despawnLeftX));
         }
 
         [Fact]
@@ -288,22 +288,22 @@ namespace KirbyTaskbarBuddy.Tests
             double animTime = 0.0;
             int scale = 2;
 
-            // Single 60Hz tick at 2x scale pulls enemy left by INHALE_PULL_SPEED * 2 = 6.0px.
-            bool stillFlying = KirbyTaskbarBuddyContext.StepInhaledEnemyPhysics(ref enemyX, ref animTime, enemy, kirbyX, 1.0, scale);
+            // Single 60Hz tick at 2x scale pulls enemy left by INHALE_PULL_SPEED * 2 = 4.0px.
+            bool stillFlying = EnemyActor.StepInhaledEnemyPhysics(ref enemyX, ref animTime, enemy, kirbyX, 1.0, scale);
             Assert.True(stillFlying);
-            Assert.Equal(240.0 - KirbyTaskbarBuddyContext.INHALE_PULL_SPEED * scale, enemyX, 5);
+            Assert.Equal(240.0 - SwallowController.INHALE_PULL_SPEED * scale, enemyX, 5);
 
             // Step until enemy reaches Kirby's touch threshold (kirbyX + INHALE_TOUCH_DISTANCE * scale = 116.0).
             int ticks = 0;
             while (stillFlying && ticks < 100)
             {
-                stillFlying = KirbyTaskbarBuddyContext.StepInhaledEnemyPhysics(ref enemyX, ref animTime, enemy, kirbyX, 1.0, scale);
+                stillFlying = EnemyActor.StepInhaledEnemyPhysics(ref enemyX, ref animTime, enemy, kirbyX, 1.0, scale);
                 ticks++;
             }
 
             Assert.False(stillFlying);
-            Assert.True(enemyX <= kirbyX + KirbyTaskbarBuddyContext.INHALE_TOUCH_DISTANCE * scale);
-            Assert.False(KirbyTaskbarBuddyContext.StepInhaledEnemyPhysics(ref enemyX, ref animTime, null, kirbyX, 1.0, scale));
+            Assert.True(enemyX <= kirbyX + SwallowController.INHALE_TOUCH_DISTANCE * scale);
+            Assert.False(EnemyActor.StepInhaledEnemyPhysics(ref enemyX, ref animTime, null, kirbyX, 1.0, scale));
         }
 
         [Fact]
@@ -325,22 +325,22 @@ namespace KirbyTaskbarBuddy.Tests
             EnemyDef enemy = new EnemyDef { Name = "waddle-dee" };
 
             // In range in front of Normal Kirby at 2x scale (max distance = INHALE_RANGE * 2):
-            double maxInhaleX = 100.0 + KirbyTaskbarBuddyContext.INHALE_RANGE * 2;
-            Assert.True(KirbyTaskbarBuddyContext.CanStartInhale(normalForm, SleepState.Awake, false, SwallowState.None, enemy, 100.0, maxInhaleX, 2));
+            double maxInhaleX = 100.0 + SwallowController.INHALE_RANGE * 2;
+            Assert.True(SwallowController.CanStartInhale(normalForm, SleepState.Awake, false, SwallowState.None, enemy, 100.0, maxInhaleX, 2));
 
             // Out of range (exceeds INHALE_RANGE * 2):
-            Assert.False(KirbyTaskbarBuddyContext.CanStartInhale(normalForm, SleepState.Awake, false, SwallowState.None, enemy, 100.0, maxInhaleX + 1.0, 2));
+            Assert.False(SwallowController.CanStartInhale(normalForm, SleepState.Awake, false, SwallowState.None, enemy, 100.0, maxInhaleX + 1.0, 2));
 
             // Enemy already behind Kirby (enemyX < kirbyX):
-            Assert.False(KirbyTaskbarBuddyContext.CanStartInhale(normalForm, SleepState.Awake, false, SwallowState.None, enemy, 100.0, 99.0, 2));
+            Assert.False(SwallowController.CanStartInhale(normalForm, SleepState.Awake, false, SwallowState.None, enemy, 100.0, 99.0, 2));
 
             // Copy ability form (not "normal"), sleeping, jumping, guarding, already inhaling, or no active enemy:
-            Assert.False(KirbyTaskbarBuddyContext.CanStartInhale(swordForm, SleepState.Awake, false, SwallowState.None, enemy, 100.0, 140.0, 2));
-            Assert.False(KirbyTaskbarBuddyContext.CanStartInhale(normalForm, SleepState.Sleeping, false, SwallowState.None, enemy, 100.0, 140.0, 2));
-            Assert.False(KirbyTaskbarBuddyContext.CanStartInhale(normalForm, SleepState.Awake, true, SwallowState.None, enemy, 100.0, 140.0, 2));
-            Assert.False(KirbyTaskbarBuddyContext.CanStartInhale(normalForm, SleepState.Awake, false, SwallowState.None, enemy, 100.0, 140.0, 2, isGuarding: true));
-            Assert.False(KirbyTaskbarBuddyContext.CanStartInhale(normalForm, SleepState.Awake, false, SwallowState.Inhaling, enemy, 100.0, 140.0, 2));
-            Assert.False(KirbyTaskbarBuddyContext.CanStartInhale(normalForm, SleepState.Awake, false, SwallowState.None, null, 100.0, 140.0, 2));
+            Assert.False(SwallowController.CanStartInhale(swordForm, SleepState.Awake, false, SwallowState.None, enemy, 100.0, 140.0, 2));
+            Assert.False(SwallowController.CanStartInhale(normalForm, SleepState.Sleeping, false, SwallowState.None, enemy, 100.0, 140.0, 2));
+            Assert.False(SwallowController.CanStartInhale(normalForm, SleepState.Awake, true, SwallowState.None, enemy, 100.0, 140.0, 2));
+            Assert.False(SwallowController.CanStartInhale(normalForm, SleepState.Awake, false, SwallowState.None, enemy, 100.0, 140.0, 2, isGuarding: true));
+            Assert.False(SwallowController.CanStartInhale(normalForm, SleepState.Awake, false, SwallowState.Inhaling, enemy, 100.0, 140.0, 2));
+            Assert.False(SwallowController.CanStartInhale(normalForm, SleepState.Awake, false, SwallowState.None, null, 100.0, 140.0, 2));
         }
 
         [Fact]
@@ -382,33 +382,33 @@ namespace KirbyTaskbarBuddy.Tests
             double enemyHitAnimTime = 0.0;
             int scale = 2;
             double kirbyX = 200.0;
-            double contactThreshold = KirbyTaskbarBuddyContext.ENEMY_CONTACT_DISTANCE * scale;
+            double contactThreshold = HitRecoilState.ENEMY_CONTACT_DISTANCE * scale;
             double enemyX = kirbyX + contactThreshold;
 
             // Outside contact distance, jumping, guarding, sleeping, or inhaling does not trigger enemy hit:
-            Assert.False(KirbyTaskbarBuddyContext.TryTriggerEnemyHit(
+            Assert.False(HitRecoilState.TryTriggerEnemyHit(
                 forms, ref currentForm, SleepState.Awake, false, SwallowState.None,
                 ref isHit, ref hitAnimTime, ref activeEnemy, ref isEnemyHit, ref enemyHitAnimTime,
                 kirbyX, kirbyX + contactThreshold + 1.0, scale));
-            Assert.False(KirbyTaskbarBuddyContext.TryTriggerEnemyHit(
+            Assert.False(HitRecoilState.TryTriggerEnemyHit(
                 forms, ref currentForm, SleepState.Awake, false, SwallowState.None,
                 ref isHit, ref hitAnimTime, ref activeEnemy, ref isEnemyHit, ref enemyHitAnimTime,
                 kirbyX, kirbyX, scale, isGuarding: true));
             Assert.Same(swordForm, currentForm);
             Assert.Same(enemy, activeEnemy);
             Assert.False(isEnemyHit);
-            Assert.False(KirbyTaskbarBuddyContext.CanTakeEnemyHit(
+            Assert.False(HitRecoilState.CanTakeEnemyHit(
                 SleepState.Awake, true, SwallowState.None, false, enemy, kirbyX, kirbyX, scale));
-            Assert.False(KirbyTaskbarBuddyContext.CanTakeEnemyHit(
+            Assert.False(HitRecoilState.CanTakeEnemyHit(
                 SleepState.Awake, false, SwallowState.None, false, enemy, kirbyX, kirbyX, scale, isGuarding: true));
-            Assert.False(KirbyTaskbarBuddyContext.CanTakeEnemyHit(
+            Assert.False(HitRecoilState.CanTakeEnemyHit(
                 SleepState.Sleeping, false, SwallowState.None, false, enemy, kirbyX, kirbyX, scale));
-            Assert.False(KirbyTaskbarBuddyContext.CanTakeEnemyHit(
+            Assert.False(HitRecoilState.CanTakeEnemyHit(
                 SleepState.Awake, false, SwallowState.Inhaling, false, enemy, kirbyX, kirbyX, scale));
 
             // Walking into the enemy within contact distance immediately strips Sword ability back to Normal
             // and enters the hit animation for both Kirby and the enemy:
-            Assert.True(KirbyTaskbarBuddyContext.TryTriggerEnemyHit(
+            Assert.True(HitRecoilState.TryTriggerEnemyHit(
                 forms, ref currentForm, SleepState.Awake, false, SwallowState.None,
                 ref isHit, ref hitAnimTime, ref activeEnemy, ref isEnemyHit, ref enemyHitAnimTime,
                 kirbyX, enemyX, scale));
@@ -426,15 +426,15 @@ namespace KirbyTaskbarBuddy.Tests
             {
                 double prevKirbyX = kirbyX;
                 double prevEnemyX = enemyX;
-                SpriteTile frame = KirbyTaskbarBuddyContext.AdvanceHitState(ref isHit, ref hitAnimTime, ref kirbyX, 1.0, currentForm, scale);
-                bool enemyActive = KirbyTaskbarBuddyContext.StepHitEnemyPhysics(ref enemyX, ref enemyHitAnimTime, activeEnemy, 1.0, scale);
+                SpriteTile frame = HitRecoilState.AdvanceHitState(ref isHit, ref hitAnimTime, ref kirbyX, 1.0, currentForm, scale);
+                bool enemyActive = HitRecoilState.StepHitEnemyPhysics(ref enemyX, ref enemyHitAnimTime, activeEnemy, 1.0, scale);
                 Assert.True(isHit);
                 Assert.True(enemyActive);
                 Assert.Same(rawHitTiles[0], frame);
-                Assert.Equal(prevKirbyX - KirbyTaskbarBuddyContext.HIT_PUSHBACK_SPEED * scale, kirbyX, 5);
-                Assert.Equal(prevEnemyX + KirbyTaskbarBuddyContext.HIT_PUSHBACK_SPEED * scale, enemyX, 5);
+                Assert.Equal(prevKirbyX - HitRecoilState.HIT_PUSHBACK_SPEED * scale, kirbyX, 5);
+                Assert.Equal(prevEnemyX + HitRecoilState.HIT_PUSHBACK_SPEED * scale, enemyX, 5);
             }
-            double expectedPushbackDist = 8 * KirbyTaskbarBuddyContext.HIT_PUSHBACK_SPEED * scale;
+            double expectedPushbackDist = 8 * HitRecoilState.HIT_PUSHBACK_SPEED * scale;
             double pushedBackKirbyX = startKirbyX - expectedPushbackDist;
             double pushedBackEnemyX = startEnemyX + expectedPushbackDist;
             Assert.Equal(pushedBackKirbyX, kirbyX, 5);
@@ -443,8 +443,8 @@ namespace KirbyTaskbarBuddy.Tests
             // Next 8 ticks (ticks 8..15): Kirby holds frame 0 and enemy holds its hit state without further pushback:
             for (int tick = 0; tick < 8; tick++)
             {
-                SpriteTile frame = KirbyTaskbarBuddyContext.AdvanceHitState(ref isHit, ref hitAnimTime, ref kirbyX, 1.0, currentForm, scale);
-                bool enemyActive = KirbyTaskbarBuddyContext.StepHitEnemyPhysics(ref enemyX, ref enemyHitAnimTime, activeEnemy, 1.0, scale);
+                SpriteTile frame = HitRecoilState.AdvanceHitState(ref isHit, ref hitAnimTime, ref kirbyX, 1.0, currentForm, scale);
+                bool enemyActive = HitRecoilState.StepHitEnemyPhysics(ref enemyX, ref enemyHitAnimTime, activeEnemy, 1.0, scale);
                 Assert.True(isHit);
                 Assert.True(enemyActive);
                 Assert.Same(rawHitTiles[0], frame);
@@ -455,8 +455,8 @@ namespace KirbyTaskbarBuddy.Tests
             // Next 8 ticks (ticks 16..23): Kirby plays frame 1 and enemy finishes the remaining 8 frames of its 24-frame hit state:
             for (int tick = 0; tick < 8; tick++)
             {
-                SpriteTile frame = KirbyTaskbarBuddyContext.AdvanceHitState(ref isHit, ref hitAnimTime, ref kirbyX, 1.0, currentForm, scale);
-                bool enemyActive = KirbyTaskbarBuddyContext.StepHitEnemyPhysics(ref enemyX, ref enemyHitAnimTime, activeEnemy, 1.0, scale);
+                SpriteTile frame = HitRecoilState.AdvanceHitState(ref isHit, ref hitAnimTime, ref kirbyX, 1.0, currentForm, scale);
+                bool enemyActive = HitRecoilState.StepHitEnemyPhysics(ref enemyX, ref enemyHitAnimTime, activeEnemy, 1.0, scale);
                 Assert.True(isHit);
                 Assert.True(enemyActive);
                 Assert.Same(rawHitTiles[1], frame);
@@ -465,22 +465,22 @@ namespace KirbyTaskbarBuddy.Tests
             }
 
             // On tick 24, the enemy completes its 24-frame hit sequence and disappears, while Kirby plays his 9th tick of frame 1:
-            Assert.False(KirbyTaskbarBuddyContext.StepHitEnemyPhysics(ref enemyX, ref enemyHitAnimTime, activeEnemy, 1.0, scale));
-            SpriteTile frameTick24 = KirbyTaskbarBuddyContext.AdvanceHitState(ref isHit, ref hitAnimTime, ref kirbyX, 1.0, currentForm, scale);
+            Assert.False(HitRecoilState.StepHitEnemyPhysics(ref enemyX, ref enemyHitAnimTime, activeEnemy, 1.0, scale));
+            SpriteTile frameTick24 = HitRecoilState.AdvanceHitState(ref isHit, ref hitAnimTime, ref kirbyX, 1.0, currentForm, scale);
             Assert.True(isHit);
             Assert.Same(rawHitTiles[1], frameTick24);
 
             // Next 9 ticks (ticks 25..33): Kirby holds standing frame (frame 2) before resuming walking:
             for (int tick = 0; tick < 9; tick++)
             {
-                SpriteTile frame = KirbyTaskbarBuddyContext.AdvanceHitState(ref isHit, ref hitAnimTime, ref kirbyX, 1.0, currentForm, scale);
+                SpriteTile frame = HitRecoilState.AdvanceHitState(ref isHit, ref hitAnimTime, ref kirbyX, 1.0, currentForm, scale);
                 Assert.True(isHit);
                 Assert.Same(rawHitTiles[2], frame);
                 Assert.Equal(pushedBackKirbyX, kirbyX, 5);
             }
 
             // On tick 34, Kirby's hit animation finishes and returns null:
-            SpriteTile doneFrame = KirbyTaskbarBuddyContext.AdvanceHitState(ref isHit, ref hitAnimTime, ref kirbyX, 1.0, currentForm, scale);
+            SpriteTile doneFrame = HitRecoilState.AdvanceHitState(ref isHit, ref hitAnimTime, ref kirbyX, 1.0, currentForm, scale);
             Assert.False(isHit);
             Assert.Equal(0.0, hitAnimTime);
             Assert.Equal(pushedBackKirbyX, kirbyX, 5);
@@ -508,7 +508,7 @@ namespace KirbyTaskbarBuddy.Tests
             int mouthfulTicks = 0;
             while (state == SwallowState.Mouthful && mouthfulTicks < 100)
             {
-                frame = KirbyTaskbarBuddyContext.AdvanceSwallowState(ref state, ref animTime, 1.0, normalForm);
+                frame = SwallowController.AdvanceSwallowState(ref state, ref animTime, 1.0, normalForm);
                 Assert.NotNull(frame);
                 mouthfulTicks++;
             }
@@ -523,7 +523,7 @@ namespace KirbyTaskbarBuddy.Tests
             int swallowTicks = 0;
             while (state == SwallowState.Swallowing && swallowTicks < 100)
             {
-                frame = KirbyTaskbarBuddyContext.AdvanceSwallowState(ref state, ref animTime, 1.0, normalForm);
+                frame = SwallowController.AdvanceSwallowState(ref state, ref animTime, 1.0, normalForm);
                 if (ReferenceEquals(frame, swallowTiles[1])) sawFrame1 = true;
                 if (ReferenceEquals(frame, swallowTiles[2])) sawFrame2 = true;
                 swallowTicks++;
@@ -577,7 +577,7 @@ namespace KirbyTaskbarBuddy.Tests
 
             for (int tick = 0; tick < 50 && state != SwallowState.None; tick++)
             {
-                KirbyTaskbarBuddyContext.AdvanceSwallowState(ref state, ref animTime, 1.0, ref currentForm, forms, ref swallowedEnemy);
+                SwallowController.AdvanceSwallowState(ref state, ref animTime, 1.0, ref currentForm, forms, ref swallowedEnemy);
             }
 
             Assert.Equal(SwallowState.None, state);
@@ -593,7 +593,7 @@ namespace KirbyTaskbarBuddy.Tests
             System.Collections.Generic.List<SpriteTile> playedAbilityFrames = new System.Collections.Generic.List<SpriteTile>();
             for (int tick = 0; tick < 60 && state != SwallowState.None; tick++)
             {
-                SpriteTile frame = KirbyTaskbarBuddyContext.AdvanceSwallowState(ref state, ref animTime, 1.0, ref currentForm, forms, ref swallowedEnemy);
+                SpriteTile frame = SwallowController.AdvanceSwallowState(ref state, ref animTime, 1.0, ref currentForm, forms, ref swallowedEnemy);
                 if (state == SwallowState.Swallowing && frame != null)
                 {
                     playedAbilityFrames.Add(frame);
